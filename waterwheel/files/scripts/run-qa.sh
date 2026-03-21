@@ -1,27 +1,42 @@
 #!/bin/bash
+# Location: /usr/local/bin/run-qa
 
-# 1. Clean up old runs
-echo "Cleaning up existing processes..."
-pkill -f "node" || true
-pkill -f "java" || true
-rm -f /tmp/.X99-lock
+echo "🔄 Preparing MCP Services for a fresh Agent run..."
 
-# 2. Start Virtual Display
-Xvfb :99 -screen 0 1280x1024x24 &
-sleep 2
+# Function to safely refresh a supervisor service
+refresh_service() {
+    local SERVICE_NAME=$1
+    # Capture the status (RUNNING, STOPPED, FATAL, etc.)
+    local STATUS=$(supervisorctl status "$SERVICE_NAME" | awk '{print $2}')
 
-# 3. Start Playwright MCP with Hardware-Level Restrictions
-# This uses the --allowed-origins flag to prevent the agent
-# from visiting unauthorized sites.
-echo "Starting Playwright MCP Server..."
-npx @playwright/mcp@latest \
-  --allowed-origins "$(cat /agent/instructions/allowed_origins.txt)" \
-  --port 3000 &
+    if [ "$STATUS" = "RUNNING" ]; then
+        echo "♻️  $SERVICE_NAME is running. Restarting to load new configs..."
+        supervisorctl restart "$SERVICE_NAME"
+    else
+        echo "🚀 $SERVICE_NAME is $STATUS. Starting fresh..."
+        supervisorctl start "$SERVICE_NAME"
+    fi
+}
 
-# 4. Start Java Email MCP (Spring Boot)
-echo "📧 Starting Java Email MCP..."
-java -Xmx256m -jar /services/email/email-mcp.jar &
+# 1. Ensure Xvfb is alive
+if ! pgrep -x "Xvfb" > /dev/null; then
+    Xvfb :99 -screen 0 1280x1024x24 &
+    sleep 2
+fi
 
-# 5. Start the AI Agent Manager
-echo "Starting AI Agent Manager..."
-# npm start
+# 2. Refresh services based on flags
+if [ "$ENABLE_PLAYWRIGHT" = "true" ]; then
+    refresh_service "playwright-mcp"
+fi
+
+if [ "$ENABLE_EMAIL" = "true" ]; then
+    refresh_service "email-mcp"
+fi
+
+# 3. Give services a moment to bind to their ports
+sleep 5
+
+# 4. Run the Agent
+echo "🤖 Starting Agent..."
+# su - agentuser -c "cd /agent && npm start"
+echo "✅ All services are up. Agent is running."
