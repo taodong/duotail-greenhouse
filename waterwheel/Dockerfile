@@ -13,8 +13,8 @@ USER root
 # -----------------------------------------------------------------------------
 RUN apt-get update && apt-get install -y \
     wget gnupg software-properties-common curl \
-    git xvfb psmisc supervisor\
-    python3 python3-pip python3-venv \
+    git xvfb psmisc supervisor x11-utils\
+    python3 python3-pip python3-venv iproute2\
     && rm -rf /var/lib/apt/lists/*
 
 RUN if [ "$TARGETARCH" = "arm64" ]; then \

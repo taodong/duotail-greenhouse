@@ -32,4 +32,4 @@ fi
 java $JVM_OPTS -jar /services/email/email-mcp.jar \
   --spring.config.additional-location=/services/email/email-mcp.properties \
   --permissions-file="$PERM_FILE" \
-  $SPRING_ARGS &
+  $SPRING_ARGS
