@@ -22,8 +22,8 @@ fi
 
 # 3. Parse YAML with yq
 if [ -n "$SOURCE_FILE" ]; then
-    # yq 'join(";")' takes the 'allowed' array and turns it into: "url1;url2;url3"
-    ALLOWED=$(yq '.allowed | join(";")' "$SOURCE_FILE" 2>/dev/null)
+    # yq 'join(",")' takes the 'allowed' array and turns it into: "url1,url2,url3"
+    ALLOWED=$(yq '.allowed | join(",")' "$SOURCE_FILE" 2>/dev/null)
 fi
 
 # 4. Fallback and Validation
@@ -35,10 +35,10 @@ fi
 echo "✅ Final Allowed Origins: $ALLOWED"
 
 # 5. Start Playwright MCP
-
-# Use absolute path for Node to avoid 'spawn error'
-# In the Playwright image, 'which node' usually returns /usr/local/bin/node
-NODE_PATH=$(which node)
+# - NPM_CONFIG_YES=true: Bypasses the "Canceled" error by auto-confirming
+# - --package: Explicitly tells npx which package to use
+# - -- : Separates npx flags from the MCP server flags
+export NPM_CONFIG_YES=true
 
 # If FIREWALL_DEBUG=true, we enable Playwright's verbose logging
 if [ "$FIREWALL_DEBUG" = "true" ]; then
@@ -46,16 +46,14 @@ if [ "$FIREWALL_DEBUG" = "true" ]; then
     export DEBUG="pw:browser,pw:mcp:firewall" # Capture browser & firewall events
 
     # Run and redirect output to the log file
-    exec $NODE_PATH /usr/local/lib/node_modules/npm/bin/npx-cli.js \
-      --yes @playwright/mcp@latest \
+    exec npx --yes @playwright/mcp@latest \
       --allowed-origins "$ALLOWED" \
       --host 0.0.0.0 \
-      --port 3000 >> "$LOG_FILE" 2>&1 &
+      --port 3000 >> "$LOG_FILE" 2>&1
 else
     # Standard run (logs handled by Supervisor)
-    exec $NODE_PATH /usr/local/lib/node_modules/npm/bin/npx-cli.js \
-      --yes @playwright/mcp@latest \
+    exec npx --yes @playwright/mcp@latest \
       --allowed-origins "$ALLOWED" \
       --host 0.0.0.0 \
-      --port 3000 &
+      --port 3000
 fi

@@ -13,17 +13,9 @@ USER root
 # -----------------------------------------------------------------------------
 RUN apt-get update && apt-get install -y \
     wget gnupg software-properties-common curl \
-    git xvfb psmisc supervisor x11-utils\
-    python3 python3-pip python3-venv iproute2\
+    git xvfb psmisc supervisor x11-utils jq \
+    python3 python3-pip python3-venv iproute2 \
     && rm -rf /var/lib/apt/lists/*
-
-RUN if [ "$TARGETARCH" = "arm64" ]; then \
-        YQ_BINARY="yq_linux_arm64"; \
-    else \
-        YQ_BINARY="yq_linux_amd64"; \
-    fi && \
-    wget "https://github.com/mikefarah/yq/releases/latest/download/${YQ_BINARY}" -O /usr/bin/yq && \
-    chmod +x /usr/bin/yq
 
 # -----------------------------------------------------------------------------
 # 2. JAVA 25 (ECLIPSE TEMURIN) INSTALLATION
@@ -42,12 +34,15 @@ ENV PATH="${JAVA_HOME}/bin:${PATH}"
 # -----------------------------------------------------------------------------
 # 3. Install Playwright MCP
 # -----------------------------------------------------------------------------
-# 1. Create the Playwright service folder (Hidden from Agent)
+# 1. Pre-install the package globally so 'npx' finds it instantly
+RUN npm install -g @playwright/mcp@latest
+
+# 2. Create the Playwright service folder (Hidden from Agent)
 RUN mkdir -p /services/playwright && \
     chown root:root /services/playwright && \
     chmod 700 /services/playwright
 
-# 2. Initialize the system-level YAML file
+# 3. Initialize the system-level YAML file
 RUN echo "allowed:" > /services/playwright/allowed-domains.yaml && \
     echo "  - http://localhost" >> /services/playwright/allowed-domains.yaml
 

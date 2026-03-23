@@ -12,14 +12,21 @@ export DISPLAY=$DISPLAY_ID
 # --- 2. HELPER FUNCTIONS ---
 refresh_service() {
     local SERVICE=$1
-    echo "♻️  Refreshing $SERVICE..."
-    # Ensure any existing 'zombie' processes on the port are cleared
-    # (e.g., 3000 for playwright, 3002 for email)
-    if [ "$SERVICE" == "playwright-mcp" ]; then PORT=3000; else PORT=3002; fi
-    fuser -k $PORT/tcp 2>/dev/null
+    local PORT=$2
+    echo "♻️  Force-refreshing $SERVICE on port $PORT..."
 
-    # Use supervisor to manage the lifecycle
-    supervisorctl restart "$SERVICE" || supervisorctl start "$SERVICE"
+    # 1. Tell Supervisor to stop the service first
+    supervisorctl stop "$SERVICE" >/dev/null 2>&1
+
+    # 2. Hard-kill any "ghost" processes still holding the port
+    # This clears the "Port already in use" error for Java
+    fuser -k "$PORT/tcp" >/dev/null 2>&1
+
+    # 3. Small "settle" time for the OS kernel (0.5s)
+    sleep 0.5
+
+    # 4. Start it fresh
+    supervisorctl start "$SERVICE"
 }
 
 wait_for_port() {
@@ -45,7 +52,7 @@ if ! pgrep -x "Xvfb" > /dev/null; then
     Xvfb $DISPLAY_ID -screen 0 1280x1024x24 2>/dev/null &
 
     # Verify Xvfb is actually rendering
-    if ! timeout 5 bash -c "until xdpyinfo -display $DISPLAY_ID >/dev/null 2>&1; do sleep 1; done"; then
+    if ! timeout 10 bash -c "until xdpyinfo -display $DISPLAY_ID >/dev/null 2>&1; do sleep 1; done"; then
         echo "❌ ERROR: Xvfb failed to start."
         exit 1
     fi
@@ -54,12 +61,12 @@ fi
 
 # --- 4. LAUNCH MCP SERVICES ---
 if [ "$ENABLE_PLAYWRIGHT" = "true" ]; then
-    refresh_service "playwright-mcp"
+    refresh_service "playwright-mcp" 3000
     wait_for_port 3000 "Playwright MCP" || exit 1
 fi
 
 if [ "$ENABLE_EMAIL" = "true" ]; then
-    refresh_service "email-mcp"
+    refresh_service "email-mcp" 3002
     wait_for_port 3002 "Email MCP" || exit 1
 fi
 
