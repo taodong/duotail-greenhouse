@@ -1,3 +1,4 @@
+# syntax = docker/dockerfile:1.3
 # -----------------------------------------------------------------------------
 # BASE IMAGE: Playwright v1.58.2 on Ubuntu 24.04 (Noble)
 # -----------------------------------------------------------------------------
@@ -15,6 +16,7 @@ RUN apt-get update && apt-get install -y \
     wget gnupg software-properties-common curl \
     git xvfb psmisc supervisor x11-utils jq \
     python3 python3-pip python3-venv iproute2 \
+    openssh-client \
     && rm -rf /var/lib/apt/lists/*
 
 # -----------------------------------------------------------------------------
@@ -78,15 +80,27 @@ RUN mkdir -p /agent/instructions /agent/tasks /agent/outputs /agent/screenshots 
 # -----------------------------------------------------------------------------
 # 6. AGENT CODE & STARTUP SCRIPT
 # -----------------------------------------------------------------------------
+# Download Agent code
+RUN mkdir -p -m 0700 /root/.ssh && ssh-keyscan github.com >> /root/.ssh/known_hosts
+
+ENV REPO_URL="git@github.com:taodong/duotail-waterwheel-agent.git"
+
+# 2. Perform the secure checkout using BuildKit ssh mount
+# Note: this RUN requires you to build with BuildKit and --ssh forwarding enabled
+RUN --mount=type=ssh git clone ${REPO_URL} ./temp_repo && \
+    # copy everything including dotfiles from the checked-out repo into the workdir
+    cp -a ./temp_repo/. . && \
+    # remove git metadata and the temp folder
+    rm -rf ./temp_repo/.git ./temp_repo
+
 # ARG REPO_URL
 RUN chown agentuser:agentgroup /agent
 
 USER agentuser
 
-# Clone agent code and install dependencies
-#RUN git clone ${REPO_URL} . && \
-#    npm install && \
-#    pip install --no-cache-dir playwright --break-system-packages
+# Git creates ./temp_repo automatically
+RUN npm install && \
+    pip install --no-cache-dir playwright --break-system-packages
 
 # -----------------------------------------------------------------------------
 # 7. MANAGER SCRIPTS

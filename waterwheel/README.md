@@ -19,10 +19,14 @@ Port | Service | Responsibility
 ## Build
 ### Build locally
 ```bash
-docker build -t taojdcn/duotail-waterwheel:latest-mac .
+export DOCKER_BUILDKIT=1
+
+docker build --ssh default -t taojdcn/duotail-waterwheel:latest-mac .
 ```
 
 ### Multi-Platform Build
 ```bash
-docker buildx build --platform linux/amd64,linux/arm64 -t taojdcn/duotail-waterwheel:latest --load .
+export DOCKER_BUILDKIT=1
+
+docker buildx build --platform linux/amd64,linux/arm64 --ssh default -t taojdcn/duotail-waterwheel:latest --load .
 ```
