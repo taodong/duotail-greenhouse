@@ -1,10 +1,11 @@
 # syntax = docker/dockerfile:1.3
-# -----------------------------------------------------------------------------
-# BASE IMAGE: Playwright v1.58.2 on Ubuntu 24.04 (Noble)
-# -----------------------------------------------------------------------------
-FROM mcr.microsoft.com/playwright:v1.58.2-noble
+# =============================================================================
+# STAGE 1 – system-deps
+# Contains all slow, stable OS/runtime installations.
+# Only rebuilt when system-level dependencies change.
+# =============================================================================
+FROM mcr.microsoft.com/playwright:v1.58.2-noble AS system-deps
 
-# Target Architecture (automatically set to arm64 on Mac, amd64 on Cloud)
 ARG TARGETARCH
 
 USER root
@@ -28,7 +29,6 @@ RUN mkdir -p /etc/apt/keyrings && \
     apt-get update && apt-get install -y temurin-25-jdk && \
     rm -rf /var/lib/apt/lists/*
 
-# Architecture-agnostic Java Home via symlink
 RUN ln -s /usr/lib/jvm/temurin-25-jdk-* /usr/lib/jvm/java-25
 ENV JAVA_HOME=/usr/lib/jvm/java-25
 ENV PATH="${JAVA_HOME}/bin:${PATH}"
@@ -36,27 +36,21 @@ ENV PATH="${JAVA_HOME}/bin:${PATH}"
 # -----------------------------------------------------------------------------
 # 3. Install Playwright MCP
 # -----------------------------------------------------------------------------
-# 1. Pre-install the package globally so 'npx' finds it instantly
 RUN npm install -g @playwright/mcp@latest
 
-# 2. Create the Playwright service folder (Hidden from Agent)
 RUN mkdir -p /services/playwright && \
     chown root:root /services/playwright && \
     chmod 700 /services/playwright
 
-# 3. Initialize the system-level YAML file
 RUN echo "allowed:" > /services/playwright/allowed-domains.yaml && \
     echo "  - http://localhost" >> /services/playwright/allowed-domains.yaml
-
 
 # -----------------------------------------------------------------------------
 # 4. Install Email Sending MCP
 # -----------------------------------------------------------------------------
-# 1. Create a separate folder that the agent CANNOT enter
 RUN mkdir -p /services/email && chmod 700 /services/email
 RUN mkdir -p /var/log/duotail-test-email-sender
 
-# 2. Put the JAR and default configurations there (Owned by Root)
 COPY --chown=root:root files/binary/email-mcp.jar /services/email/email-mcp.jar
 COPY --chown=root:root files/configs/email-mcp.properties /services/email/email-mcp.properties
 
@@ -68,51 +62,56 @@ RUN groupadd -g 2000 agentgroup && \
 
 WORKDIR /agent
 
-# Create the structure:
-# - /instructions & /tasks: Read-Only (Agent cannot overwrite its own rules)
-# - /outputs & /screenshots: Writeable
 RUN mkdir -p /agent/instructions /agent/tasks /agent/outputs /agent/screenshots /agent/bin && \
     chown root:agentgroup /agent/instructions /agent/tasks && \
     chmod 550 /agent/instructions /agent/tasks && \
     chown agentuser:agentgroup /agent/outputs /agent/screenshots /agent/bin && \
     chmod 770 /agent/outputs /agent/screenshots /agent/bin
 
-# -----------------------------------------------------------------------------
-# 6. AGENT CODE & STARTUP SCRIPT
-# -----------------------------------------------------------------------------
-# Download Agent code
+
+# =============================================================================
+# STAGE 2 – agent-builder
+# Clones the agent repo and installs its npm/pip dependencies.
+# Only rebuilt when agent code or its dependencies change.
+# =============================================================================
+FROM system-deps AS agent-builder
+
+USER root
+
 RUN mkdir -p -m 0700 /root/.ssh && ssh-keyscan github.com >> /root/.ssh/known_hosts
 
 ENV REPO_URL="git@github.com:taodong/duotail-waterwheel-agent.git"
 
-# 2. Perform the secure checkout using BuildKit ssh mount
-# Note: this RUN requires you to build with BuildKit and --ssh forwarding enabled
-RUN --mount=type=ssh git clone ${REPO_URL} ./temp_repo && \
-    # copy everything including dotfiles from the checked-out repo into the workdir
+RUN --mount=type=ssh,required=true git clone ${REPO_URL} ./temp_repo && \
     cp -a ./temp_repo/. . && \
-    # remove git metadata and the temp folder
     rm -rf ./temp_repo/.git ./temp_repo
 
-# ARG REPO_URL
-RUN chown agentuser:agentgroup /agent
+RUN chown -R agentuser:agentgroup /agent
 
 USER agentuser
 
-# Git creates ./temp_repo automatically
 RUN npm install && \
     pip install --no-cache-dir playwright --break-system-packages
+
+
+# =============================================================================
+# STAGE 3 – final
+# Assembles the runtime image from the two previous stages.
+# =============================================================================
+FROM system-deps AS final
+
+# Copy the fully-installed agent workspace from the builder stage
+COPY --from=agent-builder --chown=agentuser:agentgroup /agent /agent
 
 # -----------------------------------------------------------------------------
 # 7. MANAGER SCRIPTS
 # -----------------------------------------------------------------------------
 USER root
 
-# Install manager scripts
 COPY files/scripts/run-qa.sh /usr/local/bin/run-qa
 COPY files/scripts/playwright-mcp.sh /usr/local/bin/playwright-mcp
 COPY files/scripts/email-mcp.sh /usr/local/bin/email-mcp
 
-# Only Root can see or run these scripts
 RUN chown root:root /usr/local/bin/playwright-mcp \
                    /usr/local/bin/email-mcp \
                    /usr/local/bin/run-qa && \
@@ -131,6 +130,4 @@ COPY files/configs/supervisord.conf /etc/supervisor/conf.d/mcp-services.conf
 ENV DISPLAY=:99
 ENV PYTHONUNBUFFERED=1
 
-# Keep the container alive indefinitely without running the agent
-# Supervisor runs in the background but starts NO programs initially
 ENTRYPOINT ["/usr/bin/supervisord", "-n", "-c", "/etc/supervisor/supervisord.conf"]

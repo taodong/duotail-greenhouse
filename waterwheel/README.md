@@ -19,14 +19,14 @@ Port | Service | Responsibility
 ## Build
 ### Build locally
 ```bash
-export DOCKER_BUILDKIT=1
-
-docker build --ssh default -t taojdcn/duotail-waterwheel:latest-mac .
+DOCKER_BUILDKIT=1 docker build --ssh default="$SSH_AUTH_SOCK" -t taojdcn/duotail-waterwheel:latest-mac .
 ```
 
 ### Multi-Platform Build
 ```bash
 export DOCKER_BUILDKIT=1
 
-docker buildx build --platform linux/amd64,linux/arm64 --ssh default -t taojdcn/duotail-waterwheel:latest --load .
+docker buildx build --platform linux/amd64,linux/arm64 --ssh default="$SSH_AUTH_SOCK" -t taojdcn/duotail-waterwheel:latest --push .
 ```
+
+> Note: For multi-platform images, use `--push` (not `--load`). `--load` only supports loading a single-platform image into your local Docker engine.
