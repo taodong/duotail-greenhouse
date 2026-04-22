@@ -72,10 +72,16 @@ fi
 
 # --- 5. EXECUTE AGENT TASK ---
 echo "🤖 Handoff to AgentUser..."
+
+# Export all current env vars to a profile script so agentuser inherits them
+printenv | grep -v "^HOME=\|^USER=\|^SHELL=\|^PATH=" | while IFS= read -r line; do
+    echo "export $(echo "$line" | sed 's/=/=\"/;s/$/"/')"
+done > /etc/profile.d/container_env.sh
+chmod 644 /etc/profile.d/container_env.sh
+
 # Use 'su' to run the agent as the non-root user for security
-# We use --preserve-environment to keep our DISPLAY and ENABLE flags
-# su - agentuser -c "cd /agent && npm start"
+su - agentuser -c "cd /agent && npm start"
 
 # --- 6. CLEANUP (Optional) ---
 # Uncomment the line below if you want services to stop after the agent finishes
-# supervisorctl stop all
+supervisorctl stop all

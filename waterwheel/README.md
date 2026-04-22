@@ -30,3 +30,33 @@ docker buildx build --platform linux/amd64,linux/arm64 --ssh default="$SSH_AUTH_
 ```
 
 > Note: For multi-platform images, use `--push` (not `--load`). `--load` only supports loading a single-platform image into your local Docker engine.
+
+## Configuration
+
+### Permissions
+Playwright MCP allowed domains should be put under `/agent/instructions/allowed_domains`. Domains are listed under `allowed` as an array
+
+```yaml
+allowed:
+  - host.docker.internal:8080
+  - host.docker.internal:8025
+```
+
+Email MCP permissions should be configured under `/agent/instructions/email-permissions.yaml`.
+
+```yaml
+from:
+  domains:
+    - "*"
+    - "good_domain.com"
+  emails:
+    - "allowed@example.com"
+    - "*"
+to:
+  domains:
+    - "to.example.com"
+  emails:
+    - "allowed@example.com"
+    - "still-not-an-email"
+batchSize: 100
+```
