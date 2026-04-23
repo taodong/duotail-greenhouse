@@ -46,7 +46,8 @@ if [ "$FIREWALL_DEBUG" = "true" ]; then
     export DEBUG="pw:browser,pw:mcp:firewall" # Capture browser & firewall events
 
     # Run and redirect output to the log file
-    exec npx --yes @playwright/mcp@latest \
+    exec npx --yes @playwright/mcp@0.0.70 \
+      --browser chromium \
       --allowed-origins "$ALLOWED" \
       --host 0.0.0.0 \
       --port 3000 >> "$LOG_FILE" 2>&1

@@ -36,11 +36,13 @@ ENV PATH="${JAVA_HOME}/bin:${PATH}"
 # -----------------------------------------------------------------------------
 # 3. Install Playwright MCP
 # -----------------------------------------------------------------------------
-RUN npm install -g @playwright/mcp@latest
+RUN npm install -g @playwright/mcp@0.0.70
 
 RUN mkdir -p /services/playwright && \
     chown root:root /services/playwright && \
     chmod 700 /services/playwright
+
+RUN npx @playwright/mcp@0.0.70 install-browser chrome-for-testing
 
 RUN echo "allowed:" > /services/playwright/allowed-domains.yaml && \
     echo "  - http://localhost" >> /services/playwright/allowed-domains.yaml
@@ -81,8 +83,11 @@ USER root
 RUN mkdir -p -m 0700 /root/.ssh && ssh-keyscan github.com >> /root/.ssh/known_hosts
 
 ENV REPO_URL="git@github.com:taodong/duotail-waterwheel-agent.git"
+ARG AGENT_CLONE_BUSTER=0
 
-RUN --mount=type=ssh,required=true git clone ${REPO_URL} ./temp_repo && \
+RUN --mount=type=ssh,required=true \
+    echo "AGENT_CLONE_BUSTER=${AGENT_CLONE_BUSTER}" && \
+    git clone ${REPO_URL} ./temp_repo && \
     cp -a ./temp_repo/. . && \
     rm -rf ./temp_repo/.git ./temp_repo
 
