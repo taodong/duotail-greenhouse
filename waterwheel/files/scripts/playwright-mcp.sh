@@ -23,7 +23,7 @@ fi
 # 3. Parse YAML with yq
 if [ -n "$SOURCE_FILE" ]; then
     # yq 'join(",")' takes the 'allowed' array and turns it into: "url1,url2,url3"
-    ALLOWED=$(yq '.allowed | join(",")' "$SOURCE_FILE" 2>/dev/null)
+    ALLOWED=$(yq -r '.allowed | join(",")' "$SOURCE_FILE" 2>/dev/null)
 fi
 
 # 4. Fallback and Validation
@@ -53,6 +53,7 @@ if [ "$FIREWALL_DEBUG" = "true" ]; then
 else
     # Standard run (logs handled by Supervisor)
     exec npx --yes @playwright/mcp@latest \
+      --browser chromium \
       --allowed-origins "$ALLOWED" \
       --host 0.0.0.0 \
       --port 3000

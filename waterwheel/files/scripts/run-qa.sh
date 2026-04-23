@@ -6,8 +6,16 @@ echo "🔄 [QA-ORCHESTRATOR] Preparing fresh environment..."
 
 # --- 1. SETTINGS & PATHS ---
 LOG_FILE="/agent/outputs/firewall.log"
+OUTPUT_DIR="/agent/outputs"
 DISPLAY_ID=":99"
 export DISPLAY=$DISPLAY_ID
+
+echo "🧹 Cleaning output contents in $OUTPUT_DIR..."
+if [ -d "$OUTPUT_DIR" ]; then
+    find "$OUTPUT_DIR" -mindepth 1 -delete
+else
+    echo "ℹ️  Output directory $OUTPUT_DIR does not exist. Skipping cleanup."
+fi
 
 # --- 2. HELPER FUNCTIONS ---
 refresh_service() {

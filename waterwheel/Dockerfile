@@ -15,7 +15,7 @@ USER root
 # -----------------------------------------------------------------------------
 RUN apt-get update && apt-get install -y \
     wget gnupg software-properties-common curl \
-    git xvfb psmisc supervisor x11-utils jq \
+    git xvfb psmisc supervisor x11-utils jq yq \
     python3 python3-pip python3-venv iproute2 \
     openssh-client \
     && rm -rf /var/lib/apt/lists/*

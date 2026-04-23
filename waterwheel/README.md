@@ -13,8 +13,7 @@ FIREWALL_DEBUG | Enable firewall debug logs | false
 Port | Service | Responsibility
 --- | --- | ---
 3000 | playwright-mcp | Browser automation, clicking, and scraping.
-3001 | email-mcp | Sending test emails.
-
+3002 | email-mcp | Sending test emails.
 
 ## Build
 ### Build locally
@@ -35,11 +34,12 @@ docker buildx build --platform linux/amd64,linux/arm64 --ssh default="$SSH_AUTH_
 
 ### Permissions
 Playwright MCP allowed domains should be put under `/agent/instructions/allowed_domains`. Domains are listed under `allowed` as an array
+Playwright MCP allowed domains should be put under `/agent/instructions/allowed-domains.yaml`. For backward compatibility, `/agent/instructions/allowed_domains.yaml` and `/agent/instructions/allowed_domains` are also accepted. Domains are listed under `allowed` as an array.
 
 ```yaml
 allowed:
-  - host.docker.internal:8080
-  - host.docker.internal:8025
+  - http://host.docker.internal:8080
+  - http://host.docker.internal:8025
 ```
 
 Email MCP permissions should be configured under `/agent/instructions/email-permissions.yaml`.
@@ -60,3 +60,15 @@ to:
     - "still-not-an-email"
 batchSize: 100
 ```
+
+### Global Context
+For global variables used by all tests, create a `global-context.json` file and assign its path to environment variable `GLOBAL_CONTEXT`. The content of the file should be a JSON object.
+
+```json
+{
+    "REGISTER_URL": "http://host.docker.internal:8080/register",
+    "LOGIN_URL": "http://host.docker.internal:8080/login",
+    "EMAIL_URL": "http://host.docker.internal:8025"
+}
+```
+
