@@ -7,7 +7,7 @@ echo "🌐 Processing Playwright YAML Security Rules..."
 SYSTEM_YAML="/services/playwright/allowed-domains.yaml"
 AGENT_YAML="/agent/instructions/allowed-domains.yaml"
 LOG_FILE="/agent/outputs/firewall.log"
-DEFAULT_ORIGIN="http://localhost"
+DEFAULT_ORIGIN="http://localhost,about:blank"
 
 # 2. Select the source file
 if [ -f "$AGENT_YAML" ]; then
@@ -24,6 +24,11 @@ fi
 if [ -n "$SOURCE_FILE" ]; then
     # yq 'join(",")' takes the 'allowed' array and turns it into: "url1,url2,url3"
     ALLOWED=$(yq -r '.allowed | join(",")' "$SOURCE_FILE" 2>/dev/null)
+
+    # Keep about:blank available when loading domains from YAML.
+    if [ -n "$ALLOWED" ] && [ "$ALLOWED" != "null" ]; then
+        ALLOWED="$ALLOWED,about:blank"
+    fi
 fi
 
 # 4. Fallback and Validation
@@ -50,12 +55,22 @@ if [ "$FIREWALL_DEBUG" = "true" ]; then
       --browser chromium \
       --allowed-origins "$ALLOWED" \
       --host 0.0.0.0 \
-      --port 3000 >> "$LOG_FILE" 2>&1
+      --port 3000 \
+      -- \
+      --disable-gpu \
+      --disable-dev-shm-usage \
+      --disable-setuid-sandbox \
+      --no-sandbox>> "$LOG_FILE" 2>&1
 else
     # Standard run (logs handled by Supervisor)
     exec npx --yes @playwright/mcp@latest \
       --browser chromium \
       --allowed-origins "$ALLOWED" \
       --host 0.0.0.0 \
-      --port 3000
+      --port 3000 \
+      -- \
+      --disable-gpu \
+      --disable-dev-shm-usage \
+      --disable-setuid-sandbox \
+      --no-sandbox
 fi
