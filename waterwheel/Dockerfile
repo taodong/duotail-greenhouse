@@ -44,8 +44,10 @@ RUN mkdir -p /services/playwright && \
 
 RUN npx @playwright/mcp@0.0.70 install-browser chrome-for-testing
 
+COPY --chown=root:root files/configs/playwright-mcp-config.json /services/playwright/playwright-mcp-config.json
+
 RUN echo "allowed:" > /services/playwright/allowed-domains.yaml && \
-    echo "  - http://localhost" >> /services/playwright/allowed-domains.yaml
+    echo "  - http://localhost;about:blank" >> /services/playwright/allowed-domains.yaml
 
 # -----------------------------------------------------------------------------
 # 4. Install Email Sending MCP
