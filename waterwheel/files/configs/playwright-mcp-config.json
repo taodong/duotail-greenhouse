@@ -6,6 +6,9 @@
         "--disable-gpu",
         "--disable-setuid-sandbox"
       ]
+    },
+    "snapshot": {
+      "mode": "none"
     }
   }
 }
