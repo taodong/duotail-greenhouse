@@ -4,8 +4,7 @@
     "launchOptions": {
       "args": [
         "--disable-gpu",
-        "--disable-setuid-sandbox",
-        "--disable-features=GCMRegistration,OptimizationHints,MediaRouter,DialMediaRouteProvider"
+        "--disable-setuid-sandbox"
       ]
     },
     "snapshot": {
