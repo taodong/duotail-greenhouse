@@ -33,6 +33,10 @@ RUN ln -s /usr/lib/jvm/temurin-25-jdk-* /usr/lib/jvm/java-25
 ENV JAVA_HOME=/usr/lib/jvm/java-25
 ENV PATH="${JAVA_HOME}/bin:${PATH}"
 
+# Keep npm current in the base stage so downstream npm/npx commands share one version.
+ARG NPM_VERSION=11.13.0
+RUN npm install -g npm@${NPM_VERSION}
+
 # -----------------------------------------------------------------------------
 # 3. Install Playwright MCP
 # -----------------------------------------------------------------------------

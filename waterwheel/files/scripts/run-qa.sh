@@ -99,8 +99,8 @@ chmod 644 /etc/profile.d/container_env.sh
 
 # Use 'su' to run the agent as the non-root user for security
 if [ "$DRY_RUN" = "true" ]; then
-    echo "🧪 Dry-run mode enabled. Running: npm dry-run"
-    su - agentuser -c "cd /agent && npm dry-run"
+    echo "🧪 Dry-run mode enabled. Running: npm run dry-run"
+    su - agentuser -c "cd /agent && npm run dry-run"
 else
     su - agentuser -c "cd /agent && npm start"
 fi
