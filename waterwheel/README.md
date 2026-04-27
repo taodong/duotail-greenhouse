@@ -54,6 +54,29 @@ docker buildx build \
   --push .
 ```
 
+## run-qa Usage
+
+`run-qa` is the entrypoint script that orchestrates all MCP services and launches the agent.
+
+```bash
+run-qa [OPTIONS]
+```
+
+### Options
+Option | Description
+--- | ---
+_(none)_ | Start all enabled services and run the agent with `npm start`
+`--dry-run` | Start all enabled services but run the agent with `npm dry-run` instead of `npm start`
+
+### Examples
+```bash
+# Normal run
+run-qa
+
+# Dry-run mode
+run-qa --dry-run
+```
+
 ## Configuration
 
 ### Permissions

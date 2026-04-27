@@ -2,6 +2,16 @@
 # Location: /usr/local/bin/run-qa
 # Description: Orchestrates Xvfb, Playwright, and Email MCP services.
 
+# --- 0. PARSE ARGUMENTS ---
+DRY_RUN=false
+for arg in "$@"; do
+    case $arg in
+        --dry-run)
+            DRY_RUN=true
+            ;;
+    esac
+done
+
 echo "🔄 [QA-ORCHESTRATOR] Preparing fresh environment..."
 
 # --- 1. SETTINGS & PATHS ---
@@ -88,7 +98,12 @@ done > /etc/profile.d/container_env.sh
 chmod 644 /etc/profile.d/container_env.sh
 
 # Use 'su' to run the agent as the non-root user for security
-su - agentuser -c "cd /agent && npm start"
+if [ "$DRY_RUN" = "true" ]; then
+    echo "🧪 Dry-run mode enabled. Running: npm dry-run"
+    su - agentuser -c "cd /agent && npm dry-run"
+else
+    su - agentuser -c "cd /agent && npm start"
+fi
 
 # --- 6. CLEANUP (Optional) ---
 # Uncomment the line below if you want services to stop after the agent finishes
