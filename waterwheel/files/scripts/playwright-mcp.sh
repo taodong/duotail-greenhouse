@@ -61,6 +61,14 @@ echo "✅ Final Allowed Origins: $ALLOWED"
 # - -- : Separates npx flags from the MCP server flags
 export NPM_CONFIG_YES=true
 
+# Require explicit MCP version; do not start without it.
+if [ -z "${PLAYWRIGHT_MCP_VERSION:-}" ]; then
+    echo "❌ PLAYWRIGHT_MCP_VERSION is not set. Refusing to start @playwright/mcp."
+    exit 1
+fi
+
+echo "📦 PLAYWRIGHT_MCP_VERSION: $PLAYWRIGHT_MCP_VERSION"
+
 MCP_ARGS=(
   --browser chromium
   --allowed-origins "$ALLOWED"
@@ -73,13 +81,18 @@ if [ -n "$MCP_CONFIG" ]; then
 fi
 
 # If FIREWALL_DEBUG=true, we enable Playwright's verbose logging
+MCP_CLI="$(npm root -g)/@playwright/mcp/cli.js"
+
+if [ ! -f "$MCP_CLI" ]; then
+    echo "ERROR: @playwright/mcp not found at $MCP_CLI" >&2
+    echo "Make sure 'npm install -g @playwright/mcp@<version>' ran during image build." >&2
+    exit 1
+fi
+
 if [ "$FIREWALL_DEBUG" = "true" ]; then
     echo "🐞 Firewall Debug Mode: ON (Logging to $LOG_FILE)"
-    export DEBUG="pw:browser,pw:mcp:firewall" # Capture browser & firewall events
-
-    # Run and redirect output to the log file
-    exec npx --yes @playwright/mcp@0.0.70 "${MCP_ARGS[@]}" >> "$LOG_FILE" 2>&1
+    export DEBUG="pw:browser,pw:mcp:firewall"
+    exec node "$MCP_CLI" "${MCP_ARGS[@]}" >> "$LOG_FILE" 2>&1
 else
-    # Standard run (logs handled by Supervisor)
-    exec npx --yes @playwright/mcp@0.0.70 "${MCP_ARGS[@]}"
+    exec node "$MCP_CLI" "${MCP_ARGS[@]}"
 fi

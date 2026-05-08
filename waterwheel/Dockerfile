@@ -41,6 +41,7 @@ RUN npm install -g npm@${NPM_VERSION}
 # 3. Install Playwright MCP
 # -----------------------------------------------------------------------------
 ARG PLAYWRIGHT_MCP_VERSION=0.0.74
+ENV PLAYWRIGHT_MCP_VERSION=${PLAYWRIGHT_MCP_VERSION}
 RUN npm install -g @playwright/mcp@${PLAYWRIGHT_MCP_VERSION}
 
 RUN mkdir -p /services/playwright && \
