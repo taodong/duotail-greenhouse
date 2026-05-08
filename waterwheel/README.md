@@ -5,8 +5,8 @@ Waterwheel defines the agent for web testing.
 ## Envrionment Variables
 Variable | Description | Default
 --- | --- | ---
-ENABLE_PLAYWRIGHT | Enable Playwright MCP | true
-ENABLE_EMAIL | Enable Email MCP | true
+ENABLE_PLAYWRIGHT_MCP | Enable Playwright MCP | true
+ENABLE_EMAIL_MCP | Enable Email MCP | true
 FIREWALL_DEBUG | Enable firewall debug logs | false
 
 ## Local MCP port assignment

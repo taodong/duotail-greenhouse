@@ -78,12 +78,12 @@ if ! pgrep -x "Xvfb" > /dev/null; then
 fi
 
 # --- 4. LAUNCH MCP SERVICES ---
-if [ "$ENABLE_PLAYWRIGHT" = "true" ]; then
+if [ "$ENABLE_PLAYWRIGHT_MCP" = "true" ]; then
     refresh_service "playwright-mcp" 3000
     wait_for_port 3000 "Playwright MCP" || exit 1
 fi
 
-if [ "$ENABLE_EMAIL" = "true" ]; then
+if [ "$ENABLE_EMAIL_MCP" = "true" ]; then
     refresh_service "email-mcp" 3002
     wait_for_port 3002 "Email MCP" || exit 1
 fi

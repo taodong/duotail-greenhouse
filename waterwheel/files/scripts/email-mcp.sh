@@ -7,10 +7,10 @@ JVM_OPTS=${JAVA_OPTS:-"-Xmx256m"}
 
 # 2. Check for permissions file in the agent's instructions (Read-Only)
 # We default to the classpath if the file doesn't exist.
-PERM_FILE="classpath:permissions.yaml"
+EMAIL_PERM_FILE="classpath:permissions.yaml"
 if [ -f "/agent/instructions/email-permissions.yaml" ]; then
     echo "🔒 Found custom permissions at /agent/instructions/email-permissions.yaml"
-    PERM_FILE="file:/agent/instructions/email-permissions.yaml"
+    EMAIL_PERM_FILE="file:/agent/instructions/email-permissions.yaml"
 fi
 
 # 3. Build the Spring Boot Overrides
@@ -27,9 +27,14 @@ if [ -n "$MAIL_PORT" ]; then
     SPRING_ARGS="$SPRING_ARGS --mail-port=$MAIL_PORT"
 fi
 
+if [ -n "$MAILHOG_URL" ]; then
+    echo "🐷 Using MailHog URL: $MAILHOG_URL"
+    SPRING_ARGS="$SPRING_ARGS --mailhog-url=$MAILHOG_URL"
+fi
+
 # 4. Execute the JAR
 # We combine the fixed config location with our dynamic overrides
 java $JVM_OPTS -jar /services/email/email-mcp.jar \
   --spring.config.additional-location=/services/email/email-mcp.properties \
-  --permissions-file="$PERM_FILE" \
+  --permissions-file="$EMAIL_PERM_FILE" \
   $SPRING_ARGS

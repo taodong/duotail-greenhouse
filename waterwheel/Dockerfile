@@ -40,27 +40,34 @@ RUN npm install -g npm@${NPM_VERSION}
 # -----------------------------------------------------------------------------
 # 3. Install Playwright MCP
 # -----------------------------------------------------------------------------
-RUN npm install -g @playwright/mcp@0.0.70
+ARG PLAYWRIGHT_MCP_VERSION=0.0.74
+RUN npm install -g @playwright/mcp@${PLAYWRIGHT_MCP_VERSION}
 
 RUN mkdir -p /services/playwright && \
     chown root:root /services/playwright && \
     chmod 700 /services/playwright
 
-RUN npx @playwright/mcp@0.0.70 install-browser chrome-for-testing
+RUN node $(npm root -g)/@playwright/mcp/node_modules/playwright-core/cli.js install chromium
 
 COPY --chown=root:root files/configs/playwright-mcp-config.json /services/playwright/playwright-mcp-config.json
 
 RUN echo "allowed:" > /services/playwright/allowed-domains.yaml && \
     echo "  - http://localhost;about:blank" >> /services/playwright/allowed-domains.yaml
 
+ENV ENABLE_PLAYWRIGHT_MCP=true
+
 # -----------------------------------------------------------------------------
 # 4. Install Email Sending MCP
 # -----------------------------------------------------------------------------
+ARG EMAIL_MCP_JAR_URL=https://github.com/taodong/duotail-test-sender/releases/download/v0.2.0/duotail-test-email-utils-0.0.2-SNAPSHOT.jar
 RUN mkdir -p /services/email && chmod 700 /services/email
-RUN mkdir -p /var/log/duotail-test-email-sender
+RUN mkdir -p /var/log/email-mcp
 
-COPY --chown=root:root files/binary/email-mcp.jar /services/email/email-mcp.jar
+RUN wget -O /services/email/email-mcp.jar ${EMAIL_MCP_JAR_URL} && \
+    chown root:root /services/email/email-mcp.jar
 COPY --chown=root:root files/configs/email-mcp.properties /services/email/email-mcp.properties
+
+ENV ENABLE_EMAIL_MCP=true
 
 # -----------------------------------------------------------------------------
 # 5. SECURITY: AGENT USER & DIRECTORY SETUP
@@ -70,11 +77,11 @@ RUN groupadd -g 2000 agentgroup && \
 
 WORKDIR /agent
 
-RUN mkdir -p /agent/instructions /agent/tasks /agent/outputs /agent/screenshots /agent/bin && \
+RUN mkdir -p /agent/instructions /agent/tasks /agent/outputs /agent/bin && \
     chown root:agentgroup /agent/instructions /agent/tasks && \
     chmod 550 /agent/instructions /agent/tasks && \
-    chown agentuser:agentgroup /agent/outputs /agent/screenshots /agent/bin && \
-    chmod 770 /agent/outputs /agent/screenshots /agent/bin
+    chown agentuser:agentgroup /agent/outputs /agent/bin && \
+    chmod 770 /agent/outputs /agent/bin
 
 
 # =============================================================================
@@ -113,6 +120,13 @@ FROM system-deps AS final
 
 # Copy the fully-installed agent workspace from the builder stage
 COPY --from=agent-builder --chown=agentuser:agentgroup /agent /agent
+
+# -----------------------------------------------------------------------------
+# 6. RUNTIME INSTRUCTIONS
+# -----------------------------------------------------------------------------
+COPY --chown=root:agentgroup files/instructions/ /agent/instructions/
+RUN INSTR_MODE="$(stat -c '%a' /agent/instructions)" && \
+    chmod -R "${INSTR_MODE}" /agent/instructions
 
 # -----------------------------------------------------------------------------
 # 7. MANAGER SCRIPTS
