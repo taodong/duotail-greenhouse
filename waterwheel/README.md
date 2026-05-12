@@ -2,7 +2,7 @@
 
 Waterwheel defines the agent for web testing.
 
-## Envrionment Variables
+## Environment Variables
 Variable | Description | Default
 --- | --- | ---
 ENABLE_PLAYWRIGHT_MCP | Enable Playwright MCP | true
