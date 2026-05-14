@@ -7,7 +7,7 @@ echo "🌐 Processing Playwright YAML Security Rules..."
 SYSTEM_PERMISSION_YAML="/services/playwright/allowed-domains.yaml"
 AGENT_PERMISSION_YAML="/agent/instructions/allowed-domains.yaml"
 SYSTEM_MCP_CONFIG="/services/playwright/playwright-mcp-config.json"
-AGENT_MCP_CONFIG="/agent/instructions/mcp.config.json"
+AGENT_MCP_CONFIG="/agent/instructions/playwright-mcp-config.json"
 LOG_FILE="/agent/outputs/firewall.log"
 DEFAULT_ORIGIN="http://localhost;about:blank"
 
