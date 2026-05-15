@@ -60,7 +60,8 @@ ENV ENABLE_PLAYWRIGHT_MCP=true
 # -----------------------------------------------------------------------------
 # 4. Install Email Sending MCP
 # -----------------------------------------------------------------------------
-ARG EMAIL_MCP_JAR_URL=https://github.com/taodong/duotail-test-sender/releases/download/v0.3.1/duotail-test-email-utils-0.3.1.jar
+ARG EMAIL_MCP_VERSION=0.3.2
+ARG EMAIL_MCP_JAR_URL=https://github.com/taodong/duotail-test-sender/releases/download/v${EMAIL_MCP_VERSION}/duotail-test-email-utils-${EMAIL_MCP_VERSION}.jar
 RUN mkdir -p /services/email && chmod 700 /services/email
 RUN mkdir -p /var/log/email-mcp
 
