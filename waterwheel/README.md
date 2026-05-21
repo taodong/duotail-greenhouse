@@ -118,3 +118,45 @@ For global variables used by all tests, create a `global-context.json` file and 
     "EMAIL_URL": "http://host.docker.internal:8025"
 }
 ```
+
+## Security & Permissions
+
+### Filesystem Permission Matrix
+
+| Path | Owner:Group | Mode | `agentuser` access | Notes |
+| --- | --- | --- | --- | --- |
+| `/agent` | `agentuser:agentgroup` | varies | Mostly read/write in owned tree | Copied with `--chown=agentuser:agentgroup` in `Dockerfile` |
+| `/agent/instructions` | `root:agentgroup` | `550` | Read + traverse, no write | Policy/config files mounted here are read-only at runtime |
+| `/agent/tasks` | `root:agentgroup` | `550` | Read + traverse, no write | Task input files are read-only at runtime |
+| `/agent/outputs` | `agentuser:agentgroup` | `770` | Full rwx | Agent writes logs and output artifacts here |
+| `/agent/bin` | `agentuser:agentgroup` | `770` | Full rwx | Writable bin directory for agent use |
+| `/services/playwright` | `root:root` | `700` | No access | Playwright MCP service directory, root-only |
+| `/services/playwright/allowed-domains.yaml` | `root:root` | default file mode | Not accessible (parent dir `700`) | System fallback domain allowlist |
+| `/services/email` | `root:root` | `700` | No access | Email MCP service directory, root-only |
+| `/services/email/email-mcp.jar` | `root:root` | default file mode | Not accessible (parent dir `700`) | Email MCP JAR, loaded by service script |
+| `/usr/local/bin/run-qa` | `root:root` | `700` | Cannot execute | Container entrypoint script |
+| `/usr/local/bin/playwright-mcp` | `root:root` | `700` | Cannot execute | Playwright MCP launch script |
+| `/usr/local/bin/email-mcp` | `root:root` | `700` | Cannot execute | Email MCP launch script |
+| `/etc/profile.d/container_env.sh` | `root:root` | `644` | Read-only | Environment variables forwarded from root to `agentuser` |
+
+### Command Availability Matrix
+
+| Command / Action | Root | `agentuser` | Invocation path |
+| --- | --- | --- | --- |
+| `run-qa` | ✅ | ❌ | `/usr/local/bin/run-qa` (mode `700`) |
+| `playwright-mcp` | ✅ | ❌ | Started by Supervisor (`supervisord.conf`) |
+| `email-mcp` | ✅ | ❌ | Started by Supervisor (`supervisord.conf`) |
+| `supervisorctl start/stop` | ✅ | ❌ | Used inside `run-qa.sh` |
+| `node dist/index.cjs` | ✅ | ✅ | `su - agentuser -c "cd /agent && node dist/index.cjs"` |
+| `node dist/dry-run.cjs` | ✅ | ✅ | `su - agentuser -c "cd /agent && node dist/dry-run.cjs"` |
+
+### Effective Runtime Permissions (Summary)
+
+| Area | `agentuser` effective permission |
+| --- | --- |
+| Agent execution | Runs as non-root via `su - agentuser` |
+| `/agent/instructions` policies | Read-only — cannot self-modify policy files |
+| MCP service binaries/control | No direct execute or control |
+| `/services/*` internals | No direct access |
+| Output/log artifacts in `/agent/outputs` | Full write access |
+
