@@ -21,6 +21,30 @@ RUN apt-get update && apt-get install -y \
     && rm -rf /var/lib/apt/lists/*
 
 # -----------------------------------------------------------------------------
+# 1b. SECURITY: PATCH VULNERABLE SYSTEM PYTHON PACKAGES
+# 1. Remove the apt-managed python3-jwt (pip cannot uninstall it - no RECORD).
+# 2. Install patched versions into /usr/local (which takes import precedence).
+# 3. Delete the stale apt-installed copies left in /usr/lib/python3 so that
+#    vulnerability scanners no longer detect the old dist-info metadata.
+# -----------------------------------------------------------------------------
+RUN apt-get update && \
+    apt-get remove -y python3-jwt python3-cryptography && \
+    rm -rf /var/lib/apt/lists/* && \
+    pip install --no-cache-dir --break-system-packages --upgrade --ignore-installed \
+        "cryptography>=46.0.5" \
+        "pyjwt>=2.12.0" \
+        "setuptools>=78.1.1" \
+        "wheel>=0.46.2" && \
+    rm -rf /usr/lib/python3/dist-packages/cryptography*.dist-info \
+           /usr/lib/python3/dist-packages/cryptography*.egg-info \
+           /usr/lib/python3/dist-packages/cryptography \
+           /usr/lib/python3/dist-packages/setuptools-68.1.2.egg-info \
+           /usr/lib/python3/dist-packages/setuptools \
+           /usr/lib/python3/dist-packages/pkg_resources \
+           /usr/lib/python3/dist-packages/wheel-0.42.0.dist-info \
+           /usr/lib/python3/dist-packages/wheel
+
+# -----------------------------------------------------------------------------
 # 2. JAVA 25 (ECLIPSE TEMURIN) INSTALLATION
 # -----------------------------------------------------------------------------
 RUN mkdir -p /etc/apt/keyrings && \
@@ -60,7 +84,7 @@ ENV ENABLE_PLAYWRIGHT_MCP=true
 # -----------------------------------------------------------------------------
 # 4. Install Email Sending MCP
 # -----------------------------------------------------------------------------
-ARG EMAIL_MCP_VERSION=0.3.2
+ARG EMAIL_MCP_VERSION=0.4.1
 ARG EMAIL_MCP_JAR_URL=https://github.com/taodong/duotail-test-sender/releases/download/v${EMAIL_MCP_VERSION}/duotail-test-email-utils-${EMAIL_MCP_VERSION}.jar
 RUN mkdir -p /services/email && chmod 700 /services/email
 RUN mkdir -p /var/log/email-mcp
