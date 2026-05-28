@@ -39,8 +39,6 @@ RUN apt-get update && \
            /usr/lib/python3/dist-packages/cryptography*.egg-info \
            /usr/lib/python3/dist-packages/cryptography \
            /usr/lib/python3/dist-packages/setuptools-68.1.2.egg-info \
-           /usr/lib/python3/dist-packages/setuptools \
-           /usr/lib/python3/dist-packages/pkg_resources \
            /usr/lib/python3/dist-packages/wheel-0.42.0.dist-info \
            /usr/lib/python3/dist-packages/wheel
 
