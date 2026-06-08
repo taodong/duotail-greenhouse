@@ -1,0 +1,9 @@
+# Document for email permission configuration https://github.com/taodong/duotail-test-sender#permissionsyaml-file-structure
+# Open relay (allow all senders and recipients)
+from:
+  domains:
+    - "*"
+to:
+  domains:
+    - "*"
+batchSize: 10000

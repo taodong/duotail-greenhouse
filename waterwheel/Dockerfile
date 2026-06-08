@@ -60,7 +60,7 @@ ARG NPM_VERSION=11.14.1
 RUN npm install -g npm@${NPM_VERSION}
 
 # -----------------------------------------------------------------------------
-# 3. Install Playwright MCP
+    # 3. Install Playwright MCP
 # -----------------------------------------------------------------------------
 ARG PLAYWRIGHT_MCP_VERSION=0.0.74
 ENV PLAYWRIGHT_MCP_VERSION=${PLAYWRIGHT_MCP_VERSION}
