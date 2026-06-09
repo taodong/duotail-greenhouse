@@ -56,13 +56,13 @@ ENV JAVA_HOME=/usr/lib/jvm/java-25
 ENV PATH="${JAVA_HOME}/bin:${PATH}"
 
 # Keep npm current in the base stage so downstream npm/npx commands share one version.
-ARG NPM_VERSION=11.14.1
+ARG NPM_VERSION=11.16.0
 RUN npm install -g npm@${NPM_VERSION}
 
 # -----------------------------------------------------------------------------
     # 3. Install Playwright MCP
 # -----------------------------------------------------------------------------
-ARG PLAYWRIGHT_MCP_VERSION=0.0.74
+ARG PLAYWRIGHT_MCP_VERSION=0.0.75
 ENV PLAYWRIGHT_MCP_VERSION=${PLAYWRIGHT_MCP_VERSION}
 RUN npm install -g @playwright/mcp@${PLAYWRIGHT_MCP_VERSION}
 
@@ -183,6 +183,23 @@ RUN cd /agent && \
         fi; \
       done; \
     fi
+
+# -----------------------------------------------------------------------------
+# 6. BOOTSTRAP: DEFAULT INSTRUCTION FILES
+# -----------------------------------------------------------------------------
+USER root
+RUN find /agent/tasks -mindepth 1 -delete
+COPY --chown=agentuser:agentgroup files/bootstrap/test-wikipedia-english.md /agent/tasks/test-wikipedia-english.md
+COPY --chown=root:agentgroup files/bootstrap/global-context.json /agent/instructions/global-context.json
+COPY --chown=root:agentgroup files/bootstrap/email-permissions.yaml /agent/instructions/email-permissions.yaml
+COPY --chown=root:agentgroup files/bootstrap/allowed-domains.yaml /agent/instructions/allowed-domains.yaml
+
+RUN mkdir -p /config-helpers && \
+    chown root:agentgroup /config-helpers && \
+    chmod 550 /config-helpers
+COPY --chown=root:agentgroup files/bootstrap/extra-local.md /config-helpers/extra-local.md
+COPY --chown=root:agentgroup files/bootstrap/extra-gemma.md /config-helpers/extra-gemma.md
+COPY --chown=root:agentgroup files/bootstrap/system-prompt-cn.md /config-helpers/system-prompt-cn.md
 
 
 # =============================================================================
