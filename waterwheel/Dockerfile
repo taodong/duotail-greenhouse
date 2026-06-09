@@ -195,11 +195,11 @@ COPY --chown=root:agentgroup files/bootstrap/email-permissions.yaml /agent/instr
 COPY --chown=root:agentgroup files/bootstrap/allowed-domains.yaml /agent/instructions/allowed-domains.yaml
 
 RUN mkdir -p /config-helpers && \
-    chown root:agentgroup /config-helpers && \
+    chown root:root /config-helpers && \
     chmod 550 /config-helpers
-COPY --chown=root:agentgroup files/bootstrap/extra-local.md /config-helpers/extra-local.md
-COPY --chown=root:agentgroup files/bootstrap/extra-gemma.md /config-helpers/extra-gemma.md
-COPY --chown=root:agentgroup files/bootstrap/system-prompt-cn.md /config-helpers/system-prompt-cn.md
+COPY --chown=root:root files/bootstrap/extra-local.md /config-helpers/extra-local.md
+COPY --chown=root:root files/bootstrap/extra-gemma.md /config-helpers/extra-gemma.md
+COPY --chown=root:root files/bootstrap/system-prompt-cn.md /config-helpers/system-prompt-cn.md
 
 
 # =============================================================================
@@ -219,13 +219,16 @@ USER root
 COPY files/scripts/run-qa.sh /usr/local/bin/run-qa
 COPY files/scripts/playwright-mcp.sh /usr/local/bin/playwright-mcp
 COPY files/scripts/email-mcp.sh /usr/local/bin/email-mcp
+COPY files/scripts/config-agent.sh /usr/local/bin/config-agent
 
 RUN chown root:root /usr/local/bin/playwright-mcp \
                    /usr/local/bin/email-mcp \
-                   /usr/local/bin/run-qa && \
+                   /usr/local/bin/run-qa \
+                   /usr/local/bin/config-agent && \
     chmod 700 /usr/local/bin/playwright-mcp \
               /usr/local/bin/email-mcp \
-              /usr/local/bin/run-qa
+              /usr/local/bin/run-qa \
+              /usr/local/bin/config-agent
 
 # -----------------------------------------------------------------------------
 # 7. SUPERVISOR CONFIGURATION

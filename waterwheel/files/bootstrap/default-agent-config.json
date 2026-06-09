@@ -1,0 +1,122 @@
+{
+  "env-params": [
+    {
+      "name": "AI_PROVIDER",
+      "description": "AI provider name, e.g. 'openai', 'google', 'anthropic'",
+      "default": "anthropic"
+    },
+    {
+      "name": "AI_MODEL",
+      "description": "AI model name"
+    },
+    {
+      "name": "AI_BASE_URL",
+      "description": "Base URL for the Ollama server (required for AI_PROVIDER=gemma, e.g. http://localhost:11434)",
+      "default": ""
+    },
+    {
+      "name": "AI_API_KEY",
+      "description": "AI API key",
+      "sensitive": true
+    },
+    {
+      "name": "AI_MAX_TOKENS",
+      "description": "Max tokens for a single response",
+      "default": "8192"
+    },
+    {
+      "name": "AI_TEMPERATURE",
+      "description": "Temperature (0.0 for strict QA/Logic, 0.7 for creative)",
+      "default": "0.0"
+    },
+    {
+      "name": "GLOBAL_CONTEXT",
+      "description": "Path to a JSON file of global variables/URLs injected into the system prompt",
+      "default": "./instructions/global_context.json",
+      "file": true
+    },
+    {
+      "name": "EXTRA_INSTRUCTION",
+      "description": "Path to a Markdown file whose content is appended to the system prompt; ignored if the file does not exist",
+      "default": "./instructions/extra-instructions.md",
+      "file": true
+    },
+    {
+      "name": "PRESET_CONTEXT",
+      "description": "Path to a JSON file of preset user context values seeded into ContextManager before any task runs; ignored if the file does not exist",
+      "default": "./instructions/preset-context.json",
+      "file": true
+    },
+    {
+      "name": "TEST_RUN_TIMEOUT",
+      "description": "Maximum total duration (in seconds) for the entire test run before it is stopped with status 'timeout'",
+      "default": "7200"
+    },
+    {
+      "name": "STEP_TIMEOUT_SEC",
+      "description": "Maximum duration (in seconds) the agent may idle without receiving an LLM response per step before the task is marked failed",
+      "default": "120"
+    },
+    {
+      "name": "MAX_SNAPSHOTS_HISTORY",
+      "description": "Maximum number of recent browser_snapshot tool results to keep in LLM message history; non-positive values are treated as 1",
+      "default": "2"
+    },
+    {
+      "name": "CONTEXT_COMPRESSION",
+      "description": "Enable message compression (planning + history compaction after complete_verification); true only when value is 'true' (case-insensitive)",
+      "default": "false"
+    },
+    {
+      "name": "COMPRESSION_DEBUG",
+      "description": "Enable one compression debug log per compression right before the next LLM call; true only when value is 'true' (case-insensitive)",
+      "default": "false"
+    },
+    {
+      "name": "COMPRESSION_DEBUG_INCLUDE_REQUEST",
+      "description": "When COMPRESSION_DEBUG is enabled, include compressed summary and safe recent tail in the debug payload; true only when value is 'true' (case-insensitive)",
+      "default": "false"
+    },
+    {
+      "name": "COMPRESSION_THRESHOLD_MIN",
+      "description": "Initial input token threshold for compression eligibility; compression is not triggered until a request input token count reaches this value; non-positive values fall back to 12500",
+      "default": "12500"
+    },
+    {
+      "name": "COMPRESSION_THRESHOLD_LEAP",
+      "description": "Step size for advancing the compression threshold after each compression; non-positive values fall back to 5000",
+      "default": "5000"
+    },
+    {
+      "name": "LARGE_CONTENT_THRESHOLD",
+      "description": "UTF-8 byte threshold for large content guards in API logging and snapshot retention; non-positive values fall back to 10000",
+      "default": "10000"
+    },
+    {
+      "name": "RATE_LIMIT_RETRY",
+      "description": "Maximum number of allowed rate-limit retries per task; negative values allow unlimited retries",
+      "default": "1"
+    },
+    {
+      "name": "MAX_ITERATIONS",
+      "description": "Maximum number of LLM call iterations per task before the loop is forcibly stopped",
+      "default": "300"
+    },
+    {
+      "name": "ENABLE_API_LOGGING",
+      "description": "Enable request/response API content logging for LLM provider calls; true only when value is 'true' (case-insensitive)",
+      "default": "false"
+    },
+    {
+      "name": "MAXIMUM_RESTRICTED_TOOL_USAGE",
+      "description": "Maximum number of restricted tool calls allowed without a successful verification or context update before the task is failed; 0 or negative values disable the guard",
+      "default": "3"
+    }
+  ],
+  "restricted-tools": ["browser_run_code_unsafe"],
+  "navigation-tools": ["browser_navigate", "browser_navigate_back"],
+  "id-enforced-tools": {
+    "browser_click": ["target"],
+    "browser_fill_form": ["ref"]
+  }
+}
