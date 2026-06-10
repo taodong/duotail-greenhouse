@@ -12,6 +12,69 @@ for arg in "$@"; do
     esac
 done
 
+# --- 0.1 SINGLE-INSTANCE LOCK ---
+LOCK_FILE="/tmp/run-qa.lock"
+PID_FILE="/tmp/run-qa.pid"
+AGENT_PID_FILE="/tmp/run-qa.agent.pid"
+AGENT_PID=""
+
+terminate_pid_tree() {
+    local TARGET_PID=$1
+    local CHILD_PID
+
+    if [ -z "$TARGET_PID" ] || ! kill -0 "$TARGET_PID" 2>/dev/null; then
+        return
+    fi
+
+    for CHILD_PID in $(pgrep -P "$TARGET_PID" 2>/dev/null || true); do
+        terminate_pid_tree "$CHILD_PID"
+    done
+
+    kill "$TARGET_PID" 2>/dev/null || true
+    for _ in {1..20}; do
+        if ! kill -0 "$TARGET_PID" 2>/dev/null; then
+            return
+        fi
+        sleep 0.2
+    done
+    kill -9 "$TARGET_PID" 2>/dev/null || true
+}
+
+cleanup_lock() {
+    if [ -n "$AGENT_PID" ]; then
+        terminate_pid_tree "$AGENT_PID"
+    fi
+
+    if [ -f "$PID_FILE" ] && [ "$(cat "$PID_FILE" 2>/dev/null || true)" = "$$" ]; then
+        rm -f "$PID_FILE"
+    fi
+    if [ -f "$AGENT_PID_FILE" ]; then
+        rm -f "$AGENT_PID_FILE"
+    fi
+}
+
+handle_shutdown() {
+    exit 143
+}
+
+trap cleanup_lock EXIT
+trap handle_shutdown INT TERM
+
+# Keep this FD open for the lifetime of the script so the lock is held.
+exec 200>"$LOCK_FILE"
+
+if ! flock -n 200; then
+    PREV_PID=""
+    if [ -f "$PID_FILE" ]; then
+        PREV_PID="$(cat "$PID_FILE" 2>/dev/null || true)"
+    fi
+    echo "❌ ERROR: run-qa is already running${PREV_PID:+ (pid: $PREV_PID)}."
+    echo "   Run stop-qa first, then start a new run-qa session."
+    exit 1
+fi
+
+echo "$$" > "$PID_FILE"
+
 echo "🔄 [QA-ORCHESTRATOR] Preparing fresh environment..."
 
 # --- 1. SETTINGS & PATHS ---
@@ -100,9 +163,21 @@ chmod 644 /etc/profile.d/container_env.sh
 # Use 'su' to run the agent as the non-root user for security
 if [ "$DRY_RUN" = "true" ]; then
     echo "🧪 Dry-run mode enabled. Running: node dist/dry-run.cjs"
-    su - agentuser -c "cd /agent && node dist/dry-run.cjs"
+    su - agentuser -c "cd /agent && node dist/dry-run.cjs" &
 else
-    su - agentuser -c "cd /agent && node dist/index.cjs"
+    su - agentuser -c "cd /agent && node dist/index.cjs" &
+fi
+
+AGENT_PID=$!
+echo "$AGENT_PID" > "$AGENT_PID_FILE"
+
+wait "$AGENT_PID"
+AGENT_EXIT_CODE=$?
+AGENT_PID=""
+rm -f "$AGENT_PID_FILE"
+
+if [ "$AGENT_EXIT_CODE" -ne 0 ]; then
+    exit "$AGENT_EXIT_CODE"
 fi
 
 # --- 6. CLEANUP (Optional) ---

@@ -3,17 +3,17 @@
 Waterwheel defines the agent for web testing.
 
 ## Environment Variables
-Variable | Description | Default
---- | --- | ---
-ENABLE_PLAYWRIGHT_MCP | Enable Playwright MCP | true
-ENABLE_EMAIL_MCP | Enable Email MCP | true
-FIREWALL_DEBUG | Enable firewall debug logs | false
+| Variable | Description | Default |
+| --- | --- | --- |
+| ENABLE_PLAYWRIGHT_MCP | Enable Playwright MCP | true |
+| ENABLE_EMAIL_MCP | Enable Email MCP | true |
+| FIREWALL_DEBUG | Enable firewall debug logs | false |
 
 ## Local MCP port assignment
-Port | Service | Responsibility
---- | --- | ---
-3000 | playwright-mcp | Browser automation, clicking, and scraping.
-3002 | email-mcp | Sending test emails.
+| Port | Service | Responsibility |
+| --- | --- | --- |
+| 3000 | playwright-mcp | Browser automation, clicking, and scraping. |
+| 3002 | email-mcp | Sending test emails. |
 
 ## Build
 ### Build locally
@@ -58,15 +58,17 @@ docker buildx build \
 
 `run-qa` is the entrypoint script that orchestrates all MCP services and launches the agent.
 
+Only one `run-qa` process can run at a time. If another `run-qa` session is already active, the command exits and asks you to run `stop-qa` first.
+
 ```bash
 run-qa [OPTIONS]
 ```
 
 ### Options
-Option | Description
---- | ---
-_(none)_ | Start all enabled services and run the agent with `npm start`
-`--dry-run` | Start all enabled services but run the agent with `npm dry-run` instead of `npm start`
+| Option | Description |
+| --- | --- |
+| _(none)_ | Start all enabled services and run the agent with `npm start` |
+| `--dry-run` | Start all enabled services but run the agent with `npm dry-run` instead of `npm start` |
 
 ### Examples
 ```bash
@@ -75,6 +77,28 @@ run-qa
 
 # Dry-run mode
 run-qa --dry-run
+
+# If a previous run-qa session is still active, stop it first
+stop-qa
+run-qa
+```
+
+## stop-qa Usage
+
+`stop-qa` stops the currently tracked `run-qa` process tree, including the launched agent subprocess, if one exists.
+
+```bash
+stop-qa
+```
+
+### Examples
+```bash
+# Stop the current run-qa session, if any
+stop-qa
+
+# Restart with a fresh session
+stop-qa
+run-qa
 ```
 
 ## Configuration
@@ -123,32 +147,36 @@ For global variables used by all tests, create a `global-context.json` file and 
 
 ### Filesystem Permission Matrix
 
-| Path | Owner:Group | Mode | `agentuser` access | Notes |
-| --- | --- | --- | --- | --- |
-| `/agent` | `agentuser:agentgroup` | varies | Mostly read/write in owned tree | Copied with `--chown=agentuser:agentgroup` in `Dockerfile` |
-| `/agent/instructions` | `root:agentgroup` | `550` | Read + traverse, no write | Policy/config files mounted here are read-only at runtime |
-| `/agent/tasks` | `root:agentgroup` | `550` | Read + traverse, no write | Task input files are read-only at runtime |
-| `/agent/outputs` | `agentuser:agentgroup` | `770` | Full rwx | Agent writes logs and output artifacts here |
-| `/agent/bin` | `agentuser:agentgroup` | `770` | Full rwx | Writable bin directory for agent use |
-| `/services/playwright` | `root:root` | `700` | No access | Playwright MCP service directory, root-only |
-| `/services/playwright/allowed-domains.yaml` | `root:root` | default file mode | Not accessible (parent dir `700`) | System fallback domain allowlist |
-| `/services/email` | `root:root` | `700` | No access | Email MCP service directory, root-only |
-| `/services/email/email-mcp.jar` | `root:root` | default file mode | Not accessible (parent dir `700`) | Email MCP JAR, loaded by service script |
-| `/usr/local/bin/run-qa` | `root:root` | `700` | Cannot execute | Container entrypoint script |
-| `/usr/local/bin/playwright-mcp` | `root:root` | `700` | Cannot execute | Playwright MCP launch script |
-| `/usr/local/bin/email-mcp` | `root:root` | `700` | Cannot execute | Email MCP launch script |
-| `/etc/profile.d/container_env.sh` | `root:root` | `644` | Read-only | Environment variables forwarded from root to `agentuser` |
+| Path                                        | Owner:Group | Mode | `agentuser` access | Notes                                                     |
+|---------------------------------------------| --- | --- | --- |-----------------------------------------------------------|
+| `/agent`                                    | `agentuser:agentgroup` | varies | Mostly read/write in owned tree | Copied with `--chown=agentuser:agentgroup` in `Dockerfile` |
+| `/agent/instructions`                       | `root:agentgroup` | `550` | Read + traverse, no write | Policy/config files mounted here are read-only at runtime |
+| `/agent/tasks`                              | `root:agentgroup` | `550` | Read + traverse, no write | Task input files are read-only at runtime                 |
+| `/agent/outputs`                            | `agentuser:agentgroup` | `770` | Full rwx | Agent writes logs and output artifacts here               |
+| `/agent/bin`                                | `agentuser:agentgroup` | `770` | Full rwx | Writable bin directory for agent use                      |
+| `/services/playwright`                      | `root:root` | `700` | No access | Playwright MCP service directory, root-only               |
+| `/services/playwright/allowed-domains.yaml` | `root:root` | default file mode | Not accessible (parent dir `700`) | System fallback domain allowlist                          |
+| `/services/email`                           | `root:root` | `700` | No access | Email MCP service directory, root-only                    |
+| `/services/email/email-mcp.jar`             | `root:root` | default file mode | Not accessible (parent dir `700`) | Email MCP JAR, loaded by service script                   |
+| `/usr/local/bin/run-qa`                     | `root:root` | `700` | Cannot execute | Container entrypoint script                               |
+| `/usr/local/bin/stop-qa`                    | `root:root` | `700` | Cannot execute | Stops the tracked `run-qa` process tree                   |
+| `/usr/local/bin/playwright-mcp`             | `root:root` | `700` | Cannot execute | Playwright MCP launch script                              |
+| `/usr/local/bin/email-mcp`                  | `root:root` | `700` | Cannot execute | Email MCP launch script                                   |
+| `/usr/local/bin/config-agent`               | `root:root` | `700` | Cannot execute | Script to quickly config the agent                        |
+| `/etc/profile.d/container_env.sh`           | `root:root` | `644` | Read-only | Environment variables forwarded from root to `agentuser`  |
 
 ### Command Availability Matrix
 
-| Command / Action | Root | `agentuser` | Invocation path |
-| --- | --- | --- | --- |
-| `run-qa` | ✅ | ❌ | `/usr/local/bin/run-qa` (mode `700`) |
-| `playwright-mcp` | ✅ | ❌ | Started by Supervisor (`supervisord.conf`) |
-| `email-mcp` | ✅ | ❌ | Started by Supervisor (`supervisord.conf`) |
-| `supervisorctl start/stop` | ✅ | ❌ | Used inside `run-qa.sh` |
-| `node dist/index.cjs` | ✅ | ✅ | `su - agentuser -c "cd /agent && node dist/index.cjs"` |
-| `node dist/dry-run.cjs` | ✅ | ✅ | `su - agentuser -c "cd /agent && node dist/dry-run.cjs"` |
+| Command / Action           | Root | `agentuser` | Invocation path                                          |
+|----------------------------| --- | --- |----------------------------------------------------------|
+| `run-qa`                   | ✅ | ❌ | `/usr/local/bin/run-qa` (mode `700`)                     |
+| `stop-qa`                  | ✅ | ❌ | `/usr/local/bin/stop-qa` (mode `700`)                    |
+| `config-agent`             | ✅ | ❌ | `/usr/local/bin/config-agent` (mode `700`)               |
+| `playwright-mcp`           | ✅ | ❌ | Started by Supervisor (`supervisord.conf`)               |
+| `email-mcp`                | ✅ | ❌ | Started by Supervisor (`supervisord.conf`)               |
+| `supervisorctl start/stop` | ✅ | ❌ | Used inside `run-qa.sh`                                  |
+| `node dist/index.cjs`      | ✅ | ✅ | `su - agentuser -c "cd /agent && node dist/index.cjs"`   |
+| `node dist/dry-run.cjs`    | ✅ | ✅ | `su - agentuser -c "cd /agent && node dist/dry-run.cjs"` |
 
 ### Effective Runtime Permissions (Summary)
 

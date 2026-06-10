@@ -219,6 +219,7 @@ COPY --from=agent-builder --chown=agentuser:agentgroup /agent /agent
 USER root
 
 COPY files/scripts/run-qa.sh /usr/local/bin/run-qa
+COPY files/scripts/stop-qa.sh /usr/local/bin/stop-qa
 COPY files/scripts/playwright-mcp.sh /usr/local/bin/playwright-mcp
 COPY files/scripts/email-mcp.sh /usr/local/bin/email-mcp
 COPY files/scripts/config-agent.sh /usr/local/bin/config-agent
@@ -227,11 +228,13 @@ COPY files/scripts/update-agent-config.sh /usr/local/bin/update-agent-config
 RUN chown root:root /usr/local/bin/playwright-mcp \
                    /usr/local/bin/email-mcp \
                    /usr/local/bin/run-qa \
+                   /usr/local/bin/stop-qa \
                    /usr/local/bin/config-agent \
                    /usr/local/bin/update-agent-config && \
     chmod 700 /usr/local/bin/playwright-mcp \
               /usr/local/bin/email-mcp \
               /usr/local/bin/run-qa \
+              /usr/local/bin/stop-qa \
               /usr/local/bin/config-agent \
               /usr/local/bin/update-agent-config
 
