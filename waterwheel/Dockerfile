@@ -200,6 +200,8 @@ RUN mkdir -p /config-helpers && \
 COPY --chown=root:root files/bootstrap/extra-local.md /config-helpers/extra-local.md
 COPY --chown=root:root files/bootstrap/extra-gemma.md /config-helpers/extra-gemma.md
 COPY --chown=root:root files/bootstrap/system-prompt-cn.md /config-helpers/system-prompt-cn.md
+COPY --chown=root:root files/bootstrap/system-prompt-default.md /config-helpers/system-prompt-default.md
+COPY --chown=root:root files/bootstrap/modes/ /config-helpers/modes/
 
 
 # =============================================================================
@@ -220,15 +222,18 @@ COPY files/scripts/run-qa.sh /usr/local/bin/run-qa
 COPY files/scripts/playwright-mcp.sh /usr/local/bin/playwright-mcp
 COPY files/scripts/email-mcp.sh /usr/local/bin/email-mcp
 COPY files/scripts/config-agent.sh /usr/local/bin/config-agent
+COPY files/scripts/update-agent-config.sh /usr/local/bin/update-agent-config
 
 RUN chown root:root /usr/local/bin/playwright-mcp \
                    /usr/local/bin/email-mcp \
                    /usr/local/bin/run-qa \
-                   /usr/local/bin/config-agent && \
+                   /usr/local/bin/config-agent \
+                   /usr/local/bin/update-agent-config && \
     chmod 700 /usr/local/bin/playwright-mcp \
               /usr/local/bin/email-mcp \
               /usr/local/bin/run-qa \
-              /usr/local/bin/config-agent
+              /usr/local/bin/config-agent \
+              /usr/local/bin/update-agent-config
 
 # -----------------------------------------------------------------------------
 # 7. SUPERVISOR CONFIGURATION
