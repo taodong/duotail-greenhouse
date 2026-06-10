@@ -26,6 +26,13 @@ fi
 
 if [ ! -f "$RESULTS_FILE" ]; then
     echo "ℹ️  No test results found."
+    LOG_FILE="${AGENT_PATH}/outputs/agent.log"
+    if [ -f "$LOG_FILE" ]; then
+        echo ""
+        echo "📋 Agent log found:"
+        echo ""
+        cat "$LOG_FILE"
+    fi
     exit 0
 fi
 
