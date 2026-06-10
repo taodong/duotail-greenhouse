@@ -101,6 +101,107 @@ stop-qa
 run-qa
 ```
 
+## manage-global-constants Usage
+
+`manage-global-constants` manages key/value entries in `$AGENT_PATH/instructions/global-context.json`. These values are injected into every test run as shared global variables (base URLs, tenant IDs, credentials, etc.).
+
+```bash
+manage-global-constants [-ap <agent-path>] <operation> [args]
+```
+
+### Options
+| Option | Description |
+| --- | --- |
+| `-ap <path>` | Override the agent path (default: `/agent`) |
+
+### Operations
+| Operation | Arguments | Description |
+| --- | --- | --- |
+| `list` | — | Display all current values, or a message if none are set |
+| `set` | `KEY=value,...` | Set one or more key/value pairs (comma-delimited) |
+| `delete` | `KEY,...` | Delete one or more keys by name (comma-delimited) |
+| `clear` | — | Delete the entire context file |
+| `help` / `h` | — | Show usage |
+
+### Examples
+```bash
+# List all values
+manage-global-constants list
+
+# Set multiple values (quoted and unquoted)
+manage-global-constants set BASE_URL="https://staging.example.com",TENANT=acme,SUPPORT_EMAIL=qa@example.com
+
+# Overwrite an existing key
+manage-global-constants set TENANT=newcorp
+
+# Delete specific keys (unknown keys produce a warning, known keys are still deleted)
+manage-global-constants delete BASE_URL,TENANT
+
+# Remove all values (also deletes the file)
+manage-global-constants clear
+
+# Use a custom agent path
+manage-global-constants -ap /tmp/my-agent set BASE_URL="https://local.example.com"
+```
+
+### Notes
+- Key names are case-sensitive.
+- Values may be quoted or unquoted.
+- `set` creates the file and parent directories if they do not exist.
+- Deleting all keys removes the file automatically.
+- Unknown key names in `delete` print a warning but do not cause an error; any found keys are still deleted.
+
+---
+
+## manage-context-variables Usage
+
+`manage-context-variables` manages key/value entries in `$AGENT_PATH/instructions/preset-context.json`. It has the same interface as `manage-global-constants` but targets the preset context file, which is used to supply per-run variable overrides on top of the global context.
+
+```bash
+manage-context-variables [-ap <agent-path>] <operation> [args]
+```
+
+### Options
+| Option | Description |
+| --- | --- |
+| `-ap <path>` | Override the agent path (default: `/agent`) |
+
+### Operations
+| Operation | Arguments | Description |
+| --- | --- | --- |
+| `list` | — | Display all current values, or a message if none are set |
+| `set` | `KEY=value,...` | Set one or more key/value pairs (comma-delimited) |
+| `delete` | `KEY,...` | Delete one or more keys by name (comma-delimited) |
+| `clear` | — | Delete the entire context file |
+| `help` / `h` | — | Show usage |
+
+### Examples
+```bash
+# List all values
+manage-context-variables list
+
+# Set preset overrides
+manage-context-variables set ENV=staging,FEATURE_FLAG=enabled
+
+# Remove a specific key
+manage-context-variables delete FEATURE_FLAG
+
+# Clear all preset context
+manage-context-variables clear
+
+# Use a custom agent path
+manage-context-variables -ap /tmp/my-agent list
+```
+
+### Notes
+- Key names are case-sensitive.
+- Values may be quoted or unquoted.
+- `set` creates the file and parent directories if they do not exist.
+- Deleting all keys removes the file automatically.
+- Unknown key names in `delete` print a warning but do not cause an error; any found keys are still deleted.
+
+---
+
 ## Configuration
 
 ### Permissions
@@ -133,7 +234,7 @@ batchSize: 100
 ```
 
 ### Global Context
-For global variables used by all tests, create a `global-context.json` file and assign its path to environment variable `GLOBAL_CONTEXT`. The content of the file should be a JSON object.
+Global variables shared across all tests are stored in `$AGENT_PATH/instructions/global-context.json`. The file contains a flat JSON object of string key/value pairs.
 
 ```json
 {
@@ -142,6 +243,13 @@ For global variables used by all tests, create a `global-context.json` file and 
     "EMAIL_URL": "http://host.docker.internal:8025"
 }
 ```
+
+Use `manage-global-constants` to read and update this file without editing JSON directly. See [manage-global-constants Usage](#manage-global-constants-usage).
+
+### Preset Context
+Per-run variable overrides are stored in `$AGENT_PATH/instructions/preset-context.json`, using the same JSON format as global context. These values can selectively override or extend the global context for a specific test run.
+
+Use `manage-context-variables` to read and update this file. See [manage-context-variables Usage](#manage-context-variables-usage).
 
 ## Security & Permissions
 
@@ -163,6 +271,8 @@ For global variables used by all tests, create a `global-context.json` file and 
 | `/usr/local/bin/playwright-mcp`             | `root:root` | `700` | Cannot execute | Playwright MCP launch script                              |
 | `/usr/local/bin/email-mcp`                  | `root:root` | `700` | Cannot execute | Email MCP launch script                                   |
 | `/usr/local/bin/config-agent`               | `root:root` | `700` | Cannot execute | Script to quickly config the agent                        |
+| `/usr/local/bin/manage-global-constants`    | `root:root` | `700` | Cannot execute | Manages entries in `global-context.json`                  |
+| `/usr/local/bin/manage-context-variables`   | `root:root` | `700` | Cannot execute | Manages entries in `preset-context.json`                  |
 | `/etc/profile.d/container_env.sh`           | `root:root` | `644` | Read-only | Environment variables forwarded from root to `agentuser`  |
 
 ### Command Availability Matrix
@@ -172,6 +282,8 @@ For global variables used by all tests, create a `global-context.json` file and 
 | `run-qa`                   | ✅ | ❌ | `/usr/local/bin/run-qa` (mode `700`)                     |
 | `stop-qa`                  | ✅ | ❌ | `/usr/local/bin/stop-qa` (mode `700`)                    |
 | `config-agent`             | ✅ | ❌ | `/usr/local/bin/config-agent` (mode `700`)               |
+| `manage-global-constants`  | ✅ | ❌ | `/usr/local/bin/manage-global-constants` (mode `700`)    |
+| `manage-context-variables` | ✅ | ❌ | `/usr/local/bin/manage-context-variables` (mode `700`)   |
 | `playwright-mcp`           | ✅ | ❌ | Started by Supervisor (`supervisord.conf`)               |
 | `email-mcp`                | ✅ | ❌ | Started by Supervisor (`supervisord.conf`)               |
 | `supervisorctl start/stop` | ✅ | ❌ | Used inside `run-qa.sh`                                  |
