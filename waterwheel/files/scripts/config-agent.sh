@@ -143,6 +143,25 @@ get_provider_mode_label() {
   fi
 }
 
+get_current_provider() {
+  local slug
+  slug="$(get_provider_mode)"
+  if [[ -z "$slug" ]]; then
+    echo ""
+    return 0
+  fi
+  if [[ "$slug" == "manual" ]]; then
+    echo "manual"
+    return 0
+  fi
+  local mode_file="${MODES_DIR}/${slug}.env"
+  if [[ -f "$mode_file" ]]; then
+    grep "^# provider:" "$mode_file" | sed 's/^# provider: *//' || echo ""
+  else
+    echo ""
+  fi
+}
+
 is_mode_configured() {
   [[ -f "$STATUS_FILE" ]] && grep -qE "^provider-mode: .+" "$STATUS_FILE"
 }
@@ -256,6 +275,11 @@ disable_cn_prompt() {
 
 config_ai_mode() {
   while true; do
+    local is_initial=false
+    if ! is_mode_configured; then
+      is_initial=true
+    fi
+
     local mode_files=()
     for f in "${MODES_DIR}"/*.env; do
       [[ -f "$f" ]] && mode_files+=("$f")
@@ -272,34 +296,84 @@ config_ai_mode() {
       echo "  No mode files found in ${MODES_DIR}."
       echo ""
       print_divider
-      echo "  0) Back"
-      print_divider
+      if [[ "$is_initial" == false ]]; then
+        echo "  0) Back"
+        print_divider
+      fi
       printf "  Choice: "
       read -r _unused
       return 0
     fi
 
+    # In normal mode, filter to same-provider options only.
+    local display_files=()
+    if [[ "$is_initial" == false ]]; then
+      local current_provider
+      current_provider="$(get_current_provider)"
+      if [[ -n "$current_provider" ]]; then
+        if [[ "$current_provider" == "manual" ]]; then
+          echo "  To switch to a different AI provider, please create a new container."
+          echo ""
+          print_divider
+          echo "  0) Back"
+          print_divider
+          printf "  Choice: "
+          read -r _unused
+          return 0
+        fi
+        for f in "${mode_files[@]}"; do
+          local fp
+          fp="$(grep "^# provider:" "$f" | sed 's/^# provider: *//' || echo "")"
+          [[ "$fp" == "$current_provider" ]] && display_files+=("$f")
+        done
+        if [[ ${#display_files[@]} -le 1 ]]; then
+          echo "  To switch to a different AI provider, please create a new container."
+          echo ""
+          print_divider
+          echo "  0) Back"
+          print_divider
+          printf "  Choice: "
+          read -r _unused
+          return 0
+        fi
+      else
+        display_files=("${mode_files[@]}")
+      fi
+    else
+      display_files=("${mode_files[@]}")
+    fi
+
     echo "  Select a mode:"
     echo ""
     local i=1
-    for f in "${mode_files[@]}"; do
+    for f in "${display_files[@]}"; do
       local label
       label="$(grep "^# label:" "$f" | sed 's/^# label: *//')"
       printf "  %d) %s\n" "$i" "$label"
       ((i++))
     done
     local manual_opt=$i
-    printf "  %d) Manual customized\n" "$manual_opt"
+    if [[ "$is_initial" == true ]]; then
+      printf "  %d) Manual customized\n" "$manual_opt"
+    fi
     echo ""
     print_divider
-    echo "  0) Back"
+    if [[ "$is_initial" == false ]]; then
+      echo "  0) Back"
+    fi
     print_divider
     printf "  Choice: "
     read -r choice
 
-    if [[ "$choice" == "0" ]]; then
+    if [[ "$is_initial" == false ]] && [[ "$choice" == "0" ]]; then
       return 0
-    elif [[ "$choice" == "$manual_opt" ]]; then
+    elif [[ "$is_initial" == true ]] && [[ "$choice" == "0" ]]; then
+      echo "  Please select an AI provider mode before continuing."
+      continue
+    elif [[ "$is_initial" == true ]] && [[ "$choice" == "$manual_opt" ]]; then
+      echo ""
+      echo "  ⚠  Note: Once saved, switching to a different AI provider requires creating a new container."
+      echo ""
       printf "  Mark mode as manually customized? [y/N]: "
       read -r confirm
       if [[ "$confirm" =~ ^[Yy]$ ]]; then
@@ -311,15 +385,16 @@ config_ai_mode() {
         fi
         status_set_provider_mode "manual"
         echo "  Mode set to: Manual customized"
+        [[ "$is_initial" == true ]] && return 0
       fi
     elif [[ "$choice" =~ ^[0-9]+$ ]] && (( choice >= 1 && choice < manual_opt )); then
-      local selected_file="${mode_files[$((choice-1))]}"
+      local selected_file="${display_files[$((choice-1))]}"
       local label
       label="$(grep "^# label:" "$selected_file" | sed 's/^# label: *//')"
       local recommended
-      recommended="$(grep "^# Recommendation:" "$selected_file" | sed 's/^# Recommendation: *//' || echo "")"
+      recommended="$(grep "^# recommendation:" "$selected_file" | sed 's/^# recommendation: *//' || echo "")"
       local notes
-      notes="$(grep "^# Notes:" "$selected_file" | sed 's/^# Notes: *//' || echo "")"
+      notes="$(grep "^# notes:" "$selected_file" | sed 's/^# notes: *//' || echo "")"
 
       if [[ -n "$notes" ]]; then
         echo ""
@@ -342,6 +417,12 @@ config_ai_mode() {
         is_gemma=true
         printf "  Enter Ollama base URL (e.g. http://host.docker.internal:11434): "
         read -r base_url
+      fi
+
+      if [[ "$is_initial" == true ]]; then
+        echo ""
+        echo "  ⚠  Note: Once saved, switching to a different AI provider requires creating a new container."
+        echo ""
       fi
 
       if [[ "$is_gemma" == true && -n "$base_url" ]]; then
@@ -400,6 +481,8 @@ config_ai_mode() {
         done < "$selected_file"
         echo "    AI_MODEL=${model}"
         [[ "$is_gemma" == true && -n "$base_url" ]] && echo "    AI_BASE_URL=${base_url}"
+
+        [[ "$is_initial" == true ]] && return 0
       fi
     else
       echo "  Unknown option: $choice"
@@ -680,6 +763,13 @@ config_host_testing() {
 # ── main menu ─────────────────────────────────────────────────────────────────
 
 main() {
+  if ! is_mode_configured; then
+    echo ""
+    echo "  No AI provider mode is configured. Please select one to continue."
+    echo ""
+    config_ai_mode
+  fi
+
   while true; do
     local mode_label
     mode_label="$(get_provider_mode_label)"

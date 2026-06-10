@@ -10,12 +10,14 @@
 2. [Usage](#usage)
 3. [Main Menu](#main-menu)
 4. [Option 1 — AI Provider Mode](#option-1--ai-provider-mode)
-   - [Selecting a Mode](#selecting-a-mode)
+   - [Initial Mode Selection](#initial-mode-selection)
+   - [Selecting a Mode (returning runs)](#selecting-a-mode-returning-runs)
    - [Entering the AI Model](#entering-the-ai-model)
    - [Gemma: Ollama Base URL](#gemma-ollama-base-url)
    - [DeepSeek: Chinese System Prompt](#deepseek-chinese-system-prompt)
    - [Manual Customized](#manual-customized)
-   - [Switching Modes](#switching-modes)
+   - [Provider Locking](#provider-locking)
+   - [Switching Modes Within the Same Provider](#switching-modes-within-the-same-provider)
 5. [Option 2 — Config Domain Permissions](#option-2--config-domain-permissions)
 6. [Option 3 — Test Web App on Host](#option-3--test-web-app-on-host)
 7. [Exit Warning](#exit-warning)
@@ -73,6 +75,12 @@ config-agent -ap <agent-path> -cp <config-helpers-path>
 
 ## Main Menu
 
+### First Run (no mode configured)
+
+If no AI provider mode has been set yet, the script skips the main menu and goes directly into AI provider mode selection. The user must choose and confirm a mode before the main menu appears. See [Initial Mode Selection](#initial-mode-selection) for details.
+
+### Returning Runs
+
 ```
 ========================================
   Waterwheel Agent Configuration
@@ -80,7 +88,7 @@ config-agent -ap <agent-path> -cp <config-helpers-path>
 
   Select an item to configure:
 
-  1. AI provider mode [not set]
+  1. AI provider mode [Anthropic Default Mode]
   2. Config domain permissions
   3. Test web app on host [disabled]
   0. Exit
@@ -97,11 +105,13 @@ The current state of option 1 (active mode name) and option 3 (enabled/disabled)
 
 Selects the AI provider and model the agent will use. Writes the chosen settings to `/agent/config/agent-config.json`.
 
-### Selecting a Mode
+### Initial Mode Selection
 
-The menu lists all `.env` files found in the `modes/` directory, sorted alphabetically, plus a **Manual customized** option at the end.
+When no provider mode is configured, the script enters initial mode automatically. All available `.env` modes are listed plus **Manual customized**. There is no `0) Back` — the user must pick a mode before the main menu is shown.
 
 ```
+  No AI provider mode is configured. Please select one to continue.
+
 === AI Provider Mode [not set] ===
 
   Select a mode:
@@ -118,12 +128,48 @@ The menu lists all `.env` files found in the `modes/` directory, sorted alphabet
   10) Manual customized
 
 ----------------------------------------
+  Choice:
+```
+
+Before the final confirmation prompt, the script displays a warning:
+
+```
+  ⚠  Note: Once saved, switching to a different AI provider requires creating a new container.
+```
+
+### Selecting a Mode (returning runs)
+
+Once a provider mode is set, the menu only shows modes belonging to the **same provider** as the current mode. **Manual customized** is not shown. `0) Back` is present.
+
+**Example — current mode is `Anthropic Default Mode` (provider: Anthropic):**
+
+```
+=== AI Provider Mode [Anthropic Default Mode] ===
+
+  Select a mode:
+
+  1) Anthropic Default Mode
+  2) Anthropic Token Efficiency Mode
+
+----------------------------------------
   0) Back
 ----------------------------------------
   Choice:
 ```
 
-If a mode file contains a `# Notes:` comment, its text is displayed before the model prompt:
+If the current provider has no alternative modes (only one `.env` file for that provider), the menu is replaced with:
+
+```
+=== AI Provider Mode [Gemini Default Mode] ===
+
+  To switch to a different AI provider, please create a new container.
+
+----------------------------------------
+  0) Back
+----------------------------------------
+```
+
+If a mode file contains a `# notes:` comment, its text is displayed before the model prompt:
 
 ```
   Notes: Only gemini-2.5-flash and gemini-2.5-pro are currently supported
@@ -131,7 +177,7 @@ If a mode file contains a `# Notes:` comment, its text is displayed before the m
 
 ### Entering the AI Model
 
-Every mode requires you to enter an AI model name. If the mode file defines a `# Recommendation:` value it is shown as a default — press Enter to accept it, or type your own value.
+Every mode requires you to enter an AI model name. If the mode file defines a `# recommendation:` value it is shown as a default — press Enter to accept it, or type your own value.
 
 ```
   Enter AI model [recommended: claude-sonnet-4-6]:
@@ -162,11 +208,19 @@ When a DeepSeek mode is selected (provider `deepseek`), you are asked whether to
 
 ### Manual Customized
 
-Choosing **Manual customized** tells the script that you have configured the required environment variables (`AI_PROVIDER`, `AI_MODEL`, `AI_API_KEY`) yourself. The script records `provider-mode: manual` in `agent-config-status.yaml` and suppresses the exit warning. No changes are made to `agent-config.json`.
+**Manual customized** is only available during [initial mode selection](#initial-mode-selection). It tells the script that you have configured the required environment variables (`AI_PROVIDER`, `AI_MODEL`, `AI_API_KEY`) yourself. The script records `provider-mode: manual` in `agent-config-status.yaml` and suppresses the exit warning. No changes are made to `agent-config.json`.
 
-### Switching Modes
+Manual customized is treated as its own isolated provider. Once set, entering option 1 from the main menu shows only the "create new container" message — no mode list is displayed.
 
-When you apply a different mode, the script automatically cleans up the previous mode's side effects before applying the new one:
+### Provider Locking
+
+Once a provider mode is saved, the AI provider is locked for the lifetime of the container. Re-entering option 1 only shows modes for the same provider. To switch to a different provider, create a new container and select the desired mode during initial setup.
+
+This applies to all providers, including **Manual customized** — once manual is set, no `.env`-based modes can be selected.
+
+### Switching Modes Within the Same Provider
+
+When you apply a different mode within the same provider, the script automatically cleans up the previous mode's side effects before applying the new one:
 
 | Previous state | Action taken on switch |
 |---|---|
@@ -334,13 +388,16 @@ cp ./waterwheel/files/bootstrap/default-agent-config.json \
 ## Adding a New Mode
 
 1. Create a new `.env` file in `waterwheel/files/bootstrap/modes/`.
-2. Use the following header comments (all optional except `label`):
+2. Use the following header comments (`label` and `provider` are required; others are optional):
 
    ```bash
    # label: My Provider Default Mode
-   # Recommendation: my-model-name
-   # Notes: Any constraint or guidance shown to the user at selection time.
+   # provider: MyProvider
+   # recommendation: my-model-name
+   # notes: Any constraint or guidance shown to the user at selection time.
    ```
+
+   The `provider` value is used to group modes — only modes sharing the same `provider` string are shown together once the provider is locked. Use a consistent string across all modes for the same provider (e.g. `Anthropic`, `DeepSeek`).
 
 3. Add `KEY=VALUE` lines for every `env-params` entry in `agent-config.json` you want to override. Unknown keys are silently ignored.
 4. Rebuild the Docker image — the `COPY` instruction in the Dockerfile copies the entire `modes/` directory into `/config-helpers/modes/` at build time.
