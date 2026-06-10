@@ -119,7 +119,8 @@ check-test-result [-ap <agent-path>]
 | --- | --- |
 | `run-qa` is currently active | A message indicating testing is in progress, including the orchestrator PID |
 | `test-results.json` exists | The full JSON content of the results file |
-| Neither | `ℹ️  No test results found.` |
+| `test-results.json` missing, `agent.log` missing | `ℹ️  No test results found.` |
+| `test-results.json` missing, `agent.log` exists | `ℹ️  No test results found.` followed by the full content of `agent.log` |
 
 ### Examples
 ```bash
