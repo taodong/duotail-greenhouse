@@ -101,6 +101,22 @@ stop-qa
 run-qa
 ```
 
+## run-qa-lib (internal shared library)
+
+`run-qa-lib` is a shared bash library sourced by `run-qa`, `stop-qa`, and `check-test-result`. It is not intended to be invoked directly.
+
+It consolidates logic that was previously duplicated across `run-qa` and `stop-qa`:
+
+| Symbol | Description |
+| --- | --- |
+| `RUN_QA_PID_FILE` | Path to the orchestrator PID file (`/tmp/run-qa.pid`) |
+| `RUN_QA_AGENT_PID_FILE` | Path to the agent subprocess PID file (`/tmp/run-qa.agent.pid`) |
+| `RUN_QA_LOCK_FILE` | Path to the exclusive lock file (`/tmp/run-qa.lock`) |
+| `terminate_pid_tree <pid>` | Recursively terminates a process and all its children |
+| `is_run_qa_active` | Returns `0` if `run-qa` is running, `1` otherwise; sets `$RUN_QA_ACTIVE_PID` |
+
+---
+
 ## check-test-result Usage
 
 `check-test-result` prints the content of `$AGENT_PATH/outputs/test-results.json`, or reports the current run status if a test is still in progress.
