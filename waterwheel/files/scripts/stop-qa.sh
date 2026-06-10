@@ -2,30 +2,13 @@
 # Location: /usr/local/bin/stop-qa
 # Description: Stops an existing run-qa process tree if one is active.
 
-PID_FILE="/tmp/run-qa.pid"
-AGENT_PID_FILE="/tmp/run-qa.agent.pid"
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+_LIB="${SCRIPT_DIR}/run-qa-lib"
+# shellcheck disable=SC1090
+source "${_LIB}.sh" 2>/dev/null || source "${_LIB}"
 
-terminate_pid_tree() {
-    local TARGET_PID=$1
-    local CHILD_PID
-
-    if [ -z "$TARGET_PID" ] || ! kill -0 "$TARGET_PID" 2>/dev/null; then
-        return
-    fi
-
-    for CHILD_PID in $(pgrep -P "$TARGET_PID" 2>/dev/null || true); do
-        terminate_pid_tree "$CHILD_PID"
-    done
-
-    kill "$TARGET_PID" 2>/dev/null || true
-    for _ in {1..20}; do
-        if ! kill -0 "$TARGET_PID" 2>/dev/null; then
-            return
-        fi
-        sleep 0.2
-    done
-    kill -9 "$TARGET_PID" 2>/dev/null || true
-}
+PID_FILE="$RUN_QA_PID_FILE"
+AGENT_PID_FILE="$RUN_QA_AGENT_PID_FILE"
 
 RUN_QA_PID=""
 AGENT_PID=""

@@ -101,6 +101,37 @@ stop-qa
 run-qa
 ```
 
+## check-test-result Usage
+
+`check-test-result` prints the content of `$AGENT_PATH/outputs/test-results.json`, or reports the current run status if a test is still in progress.
+
+```bash
+check-test-result [-ap <agent-path>]
+```
+
+### Options
+| Option | Description |
+| --- | --- |
+| `-ap <path>` | Override the agent path (default: `/agent`) |
+
+### Output
+| Condition | Output |
+| --- | --- |
+| `run-qa` is currently active | A message indicating testing is in progress, including the orchestrator PID |
+| `test-results.json` exists | The full JSON content of the results file |
+| Neither | `ℹ️  No test results found.` |
+
+### Examples
+```bash
+# Check results after a run
+check-test-result
+
+# Check results using a custom agent path
+check-test-result -ap /tmp/my-agent
+```
+
+---
+
 ## manage-global-constants Usage
 
 `manage-global-constants` manages key/value entries in `$AGENT_PATH/instructions/global-context.json`. These values are injected into every test run as shared global variables (base URLs, tenant IDs, credentials, etc.).
@@ -268,9 +299,11 @@ Use `manage-context-variables` to read and update this file. See [manage-context
 | `/services/email/email-mcp.jar`             | `root:root` | default file mode | Not accessible (parent dir `700`) | Email MCP JAR, loaded by service script                   |
 | `/usr/local/bin/run-qa`                     | `root:root` | `700` | Cannot execute | Container entrypoint script                               |
 | `/usr/local/bin/stop-qa`                    | `root:root` | `700` | Cannot execute | Stops the tracked `run-qa` process tree                   |
+| `/usr/local/bin/check-test-result`          | `root:root` | `700` | Cannot execute | Prints test results or in-progress status                 |
 | `/usr/local/bin/playwright-mcp`             | `root:root` | `700` | Cannot execute | Playwright MCP launch script                              |
 | `/usr/local/bin/email-mcp`                  | `root:root` | `700` | Cannot execute | Email MCP launch script                                   |
 | `/usr/local/bin/config-agent`               | `root:root` | `700` | Cannot execute | Script to quickly config the agent                        |
+| `/usr/local/bin/run-qa-lib`                 | `root:root` | `700` | Cannot execute | Shared library sourced by `run-qa`, `stop-qa`, `check-test-result` |
 | `/usr/local/bin/manage-global-constants`    | `root:root` | `700` | Cannot execute | Manages entries in `global-context.json`                  |
 | `/usr/local/bin/manage-context-variables`   | `root:root` | `700` | Cannot execute | Manages entries in `preset-context.json`                  |
 | `/etc/profile.d/container_env.sh`           | `root:root` | `644` | Read-only | Environment variables forwarded from root to `agentuser`  |
@@ -281,6 +314,7 @@ Use `manage-context-variables` to read and update this file. See [manage-context
 |----------------------------| --- | --- |----------------------------------------------------------|
 | `run-qa`                   | ✅ | ❌ | `/usr/local/bin/run-qa` (mode `700`)                     |
 | `stop-qa`                  | ✅ | ❌ | `/usr/local/bin/stop-qa` (mode `700`)                    |
+| `check-test-result`        | ✅ | ❌ | `/usr/local/bin/check-test-result` (mode `700`)          |
 | `config-agent`             | ✅ | ❌ | `/usr/local/bin/config-agent` (mode `700`)               |
 | `manage-global-constants`  | ✅ | ❌ | `/usr/local/bin/manage-global-constants` (mode `700`)    |
 | `manage-context-variables` | ✅ | ❌ | `/usr/local/bin/manage-context-variables` (mode `700`)   |
