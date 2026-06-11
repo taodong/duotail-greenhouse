@@ -5,6 +5,7 @@ set -euo pipefail
 MODE_FILE=""
 MODEL_VALUE=""
 CONFIG_FILE=""
+TEMPLATE_FILE=""
 EXTRA_SETTINGS=()
 
 while [[ $# -gt 0 ]]; do
@@ -19,6 +20,10 @@ while [[ $# -gt 0 ]]; do
       ;;
     --config)
       CONFIG_FILE="${2:?--config requires a value}"
+      shift 2
+      ;;
+    --template)
+      TEMPLATE_FILE="${2:?--template requires a value}"
       shift 2
       ;;
     --set)
@@ -39,13 +44,18 @@ if [[ -z "$MODE_FILE" || -z "$MODEL_VALUE" || -z "$CONFIG_FILE" ]]; then
   exit 1
 fi
 
-if [[ ! -f "$CONFIG_FILE" ]]; then
+if [[ -n "$TEMPLATE_FILE" ]]; then
+  if [[ ! -f "$TEMPLATE_FILE" ]]; then
+    echo "Error: template $TEMPLATE_FILE not found." >&2
+    exit 1
+  fi
+elif [[ ! -f "$CONFIG_FILE" ]]; then
   echo "Error: $CONFIG_FILE not found. Please pull a new image." >&2
   exit 1
 fi
 
 tmp="$(mktemp)"
-cp "$CONFIG_FILE" "$tmp"
+cp "${TEMPLATE_FILE:-$CONFIG_FILE}" "$tmp"
 
 while IFS= read -r line; do
   [[ "$line" =~ ^# ]] && continue

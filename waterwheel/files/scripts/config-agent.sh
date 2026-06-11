@@ -32,6 +32,7 @@ SYSTEM_PROMPT_FILE="${AGENT_PATH}/config/system.prompt.md"
 SYSTEM_PROMPT_CN="${CONFIG_HELPERS_PATH}/system-prompt-cn.md"
 SYSTEM_PROMPT_DEFAULT="${CONFIG_HELPERS_PATH}/system-prompt-default.md"
 AGENT_CONFIG_FILE="${AGENT_PATH}/config/agent-config.json"
+DEFAULT_AGENT_CONFIG_FILE="${CONFIG_HELPERS_PATH}/default-agent-config.json"
 MODES_DIR="${CONFIG_HELPERS_PATH}/modes"
 
 # Resolve update-agent-config: prefer same directory (local dev), fall back to PATH (container)
@@ -436,7 +437,7 @@ config_ai_mode() {
           disable_gemma_extra
         fi
 
-        local update_args=(--mode-file "$selected_file" --model "$model" --config "$AGENT_CONFIG_FILE")
+        local update_args=(--template "$DEFAULT_AGENT_CONFIG_FILE" --mode-file "$selected_file" --model "$model" --config "$AGENT_CONFIG_FILE")
         [[ "$is_gemma" == true && -n "$base_url" ]] && update_args+=(--set "AI_BASE_URL=${base_url}")
 
         if ! "$UPDATE_CONFIG_CMD" "${update_args[@]}"; then
