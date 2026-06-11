@@ -146,9 +146,9 @@ chmod 644 /etc/profile.d/container_env.sh
 # Use 'su' to run the agent as the non-root user for security
 if [ "$DRY_RUN" = "true" ]; then
     echo "🧪 Dry-run mode enabled. Running: node dist/dry-run.cjs"
-    su - agentuser -c "cd /agent && node dist/dry-run.cjs" &
+    su - agentuser -c "cd /agent && node dist/dry-run.cjs" 200>&- &
 else
-    su - agentuser -c "cd /agent && node dist/index.cjs" &
+    su - agentuser -c "cd /agent && node dist/index.cjs" 200>&- &
 fi
 
 AGENT_PID=$!
