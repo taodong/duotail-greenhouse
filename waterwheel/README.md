@@ -103,7 +103,7 @@ run-qa
 
 ## run-qa-lib (internal shared library)
 
-`run-qa-lib` is a shared bash library sourced by `run-qa`, `stop-qa`, and `check-test-result`. It is not intended to be invoked directly.
+`run-qa-lib` is a shared bash library sourced by `run-qa`, `stop-qa`, `check-test-result`, and `get-failure-detail`. It is not intended to be invoked directly.
 
 It consolidates logic that was previously duplicated across `run-qa` and `stop-qa`:
 
@@ -145,6 +145,59 @@ check-test-result
 
 # Check results using a custom agent path
 check-test-result -ap /tmp/my-agent
+```
+
+---
+
+## get-failure-detail Usage
+
+`get-failure-detail` prints a full diagnostic report for the first failed test found in `$AGENT_PATH/outputs/test-results.json`. If a test run is still in progress, it reports that instead.
+
+```bash
+get-failure-detail [-ap <agent-path>] [-d]
+```
+
+### Options
+| Option | Description |
+| --- | --- |
+| `-ap <path>` | Override the agent path (default: `/agent`) |
+| `-d` | Include API log (`$AGENT_PATH/outputs/api-log.json`) at the end of the report |
+
+### Output when a failed test is found
+
+Each section is printed in order. Missing files are reported inline and do not abort the output.
+
+| Section | Source |
+| --- | --- |
+| **Failed Test Summary** | The failed test JSON object from `test-results.json` |
+| **Test Detail** | `$AGENT_PATH/tasks/<test-file>` |
+| **Test Steps** | `$AGENT_PATH/outputs/<test-file-stem>_log.json` |
+| **Test Context** | `$AGENT_PATH/outputs/test-context.json` |
+| **Agent Log** | `$AGENT_PATH/outputs/agent.log` |
+| **API Log** _(only with `-d`, only if file exists)_ | `$AGENT_PATH/outputs/api-log.json` |
+
+### Output when no failure
+
+| Condition | Output |
+| --- | --- |
+| `run-qa` is currently active | A message indicating testing is in progress, including the orchestrator PID |
+| `test-results.json` missing, `agent.log` missing | `ℹ️  No test results found.` |
+| `test-results.json` missing, `agent.log` exists | `ℹ️  No test results found.` followed by the full content of `agent.log` |
+| `test-results.json` exists, no failed tests | `✅ No failed tests found in test results.` |
+
+### Examples
+```bash
+# Check first failure after a run
+get-failure-detail
+
+# Include API log in the report
+get-failure-detail -d
+
+# Use a custom agent path
+get-failure-detail -ap /tmp/my-agent
+
+# Custom agent path with API log
+get-failure-detail -ap /tmp/my-agent -d
 ```
 
 ---
@@ -317,6 +370,7 @@ Use `manage-context-variables` to read and update this file. See [manage-context
 | `/usr/local/bin/run-qa`                     | `root:root` | `700` | Cannot execute | Container entrypoint script                               |
 | `/usr/local/bin/stop-qa`                    | `root:root` | `700` | Cannot execute | Stops the tracked `run-qa` process tree                   |
 | `/usr/local/bin/check-test-result`          | `root:root` | `700` | Cannot execute | Prints test results or in-progress status                 |
+| `/usr/local/bin/get-failure-detail`         | `root:root` | `700` | Cannot execute | Prints full diagnostic report for the first failed test   |
 | `/usr/local/bin/playwright-mcp`             | `root:root` | `700` | Cannot execute | Playwright MCP launch script                              |
 | `/usr/local/bin/email-mcp`                  | `root:root` | `700` | Cannot execute | Email MCP launch script                                   |
 | `/usr/local/bin/config-agent`               | `root:root` | `700` | Cannot execute | Script to quickly config the agent                        |
@@ -332,6 +386,7 @@ Use `manage-context-variables` to read and update this file. See [manage-context
 | `run-qa`                   | ✅ | ❌ | `/usr/local/bin/run-qa` (mode `700`)                     |
 | `stop-qa`                  | ✅ | ❌ | `/usr/local/bin/stop-qa` (mode `700`)                    |
 | `check-test-result`        | ✅ | ❌ | `/usr/local/bin/check-test-result` (mode `700`)          |
+| `get-failure-detail`       | ✅ | ❌ | `/usr/local/bin/get-failure-detail` (mode `700`)         |
 | `config-agent`             | ✅ | ❌ | `/usr/local/bin/config-agent` (mode `700`)               |
 | `manage-global-constants`  | ✅ | ❌ | `/usr/local/bin/manage-global-constants` (mode `700`)    |
 | `manage-context-variables` | ✅ | ❌ | `/usr/local/bin/manage-context-variables` (mode `700`)   |
