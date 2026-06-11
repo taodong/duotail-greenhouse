@@ -212,6 +212,7 @@ FROM system-deps AS final
 
 # Copy the fully-installed agent workspace from the builder stage
 COPY --from=agent-builder --chown=agentuser:agentgroup /agent /agent
+COPY --from=agent-builder --chown=root:root /config-helpers /config-helpers
 
 # -----------------------------------------------------------------------------
 # 6. MANAGER SCRIPTS
