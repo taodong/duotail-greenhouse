@@ -113,7 +113,7 @@ wait_for_port() {
 if ! pgrep -x "Xvfb" > /dev/null; then
     echo "🖥️  Starting Virtual Display $DISPLAY_ID..."
     # 2>/dev/null silences the 'Could not resolve keysym' warnings
-    Xvfb $DISPLAY_ID -screen 0 1280x1024x24 2>/dev/null &
+    Xvfb $DISPLAY_ID -screen 0 1280x1024x24 2>/dev/null 200>&- &
 
     # Verify Xvfb is actually rendering
     if ! timeout 10 bash -c "until xdpyinfo -display $DISPLAY_ID >/dev/null 2>&1; do sleep 1; done"; then

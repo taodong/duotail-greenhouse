@@ -21,7 +21,19 @@ if [ -f "$AGENT_PID_FILE" ]; then
 fi
 
 if [ -z "$RUN_QA_PID" ] && [ -z "$AGENT_PID" ]; then
-    echo "ℹ️  No tracked run-qa process found."
+    # No tracked process, but check if the lock file is still held by an
+    # orphaned process (e.g. Xvfb inheriting FD 200 from a prior run).
+    if [ -f "$RUN_QA_LOCK_FILE" ] && ! flock -n "$RUN_QA_LOCK_FILE" true 2>/dev/null; then
+        LOCK_HOLDER="$(fuser "$RUN_QA_LOCK_FILE" 2>/dev/null | tr -s ' ' '\n' | grep -v '^$' | head -1 || true)"
+        if [ -n "$LOCK_HOLDER" ]; then
+            echo "⚠️  No tracked process, but lock is held by PID $LOCK_HOLDER. Releasing..."
+            terminate_pid_tree "$LOCK_HOLDER"
+        fi
+        rm -f "$RUN_QA_LOCK_FILE"
+        echo "✅ Stale lock cleared."
+    else
+        echo "ℹ️  No tracked run-qa process found."
+    fi
     exit 0
 fi
 
