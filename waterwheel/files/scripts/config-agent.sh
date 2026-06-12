@@ -498,7 +498,7 @@ load_domains() {
   if [[ ! -f "$ALLOWED_DOMAINS_FILE" ]]; then
     return 0
   fi
-  while IFS= read -r line; do
+  while IFS= read -r line || [[ -n "$line" ]]; do
     if [[ "$line" =~ ^[[:space:]]*-[[:space:]]+(.*) ]]; then
       domain="${BASH_REMATCH[1]}"
       [[ -n "$domain" ]] && DOMAINS+=("$domain")
