@@ -18,7 +18,8 @@ Waterwheel defines the agent for web testing.
 ## Build
 ### Build locally
 ```bash
-DOCKER_BUILDKIT=1 docker build --ssh default="$SSH_AUTH_SOCK" -t taojdcn/duotail-waterwheel:latest-mac .
+docker buildx create --driver docker-container --name multiplatform
+docker buildx build --platform linux/amd64,linux/arm64 --ssh default="$SSH_AUTH_SOCK" -t taojdcn/duotail-waterwheel:latest --push --builder multiplatform .
 ```
 
 ### Refresh agent code during build (without rebuilding `system-deps`)
@@ -36,10 +37,13 @@ Using `AGENT_CLONE_BUSTER` invalidates the clone layer in `agent-builder` (and f
 Note: if the previous build used a different `AGENT_CLONE_BUSTER` value (for example `1`) and the current build uses the default (`0`), Docker treats that as a different cache key and the clone step may run once to populate that cache variant.
 
 ### Multi-Platform Build
+Create multiple platform driver once, then use it for building multi-platform images
 ```bash
-export DOCKER_BUILDKIT=1
+docker buildx create --driver docker-container --name multiplatform
+```
 
-docker buildx build --platform linux/amd64,linux/arm64 --ssh default="$SSH_AUTH_SOCK" -t taojdcn/duotail-waterwheel:latest --push .
+```bash
+docker buildx build --platform linux/amd64,linux/arm64 --ssh default="$SSH_AUTH_SOCK" -t taojdcn/duotail-waterwheel:latest --push --builder multiplatform .
 ```
 
 ### Multi-Platform Build with fresh agent source
@@ -51,6 +55,7 @@ docker buildx build \
   --ssh default="$SSH_AUTH_SOCK" \
   --build-arg AGENT_CLONE_BUSTER="$(date +%s)" \
   -t taojdcn/duotail-waterwheel:latest \
+  --builder multiplatform \
   --push .
 ```
 
