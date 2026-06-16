@@ -287,10 +287,10 @@ manage-context-variables [-ap <agent-path>] <operation> [args]
 manage-context-variables list
 
 # Set preset overrides
-manage-context-variables set ENV=staging,FEATURE_FLAG=enabled
+manage-context-variables set username=admin,password=123456789
 
 # Remove a specific key
-manage-context-variables delete FEATURE_FLAG
+manage-context-variables delete username
 
 # Clear all preset context
 manage-context-variables clear
