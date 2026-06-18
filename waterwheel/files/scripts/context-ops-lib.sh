@@ -4,10 +4,34 @@
 
 cmd_list() {
     if [ ! -f "$TARGET_FILE" ]; then
-        echo "No global values are set."
+        if is_preset_mode; then
+            echo "No context values are set."
+        else
+            echo "No global values are set."
+        fi
         return 0
     fi
     jq . "$TARGET_FILE"
+}
+
+# Context modes:
+# - flat   (default): legacy root-level key/value JSON
+# - preset: preset-context.json with {data, flow} shape
+is_preset_mode() {
+    [ "${CONTEXT_OPS_MODE:-flat}" = "preset" ]
+}
+
+is_preset_json_empty_file() {
+    local file="$1"
+    if [ ! -f "$file" ]; then
+        return 0
+    fi
+    jq -e '((.data // {}) | length == 0) and ((.flow // []) | length == 0)' "$file" >/dev/null 2>&1
+}
+
+is_preset_json_empty_string() {
+    local json="$1"
+    printf '%s' "$json" | jq -e '((.data // {}) | length == 0) and ((.flow // []) | length == 0)' >/dev/null 2>&1
 }
 
 cmd_set() {
@@ -42,6 +66,11 @@ cmd_set() {
         json=$(cat "$TARGET_FILE")
     fi
 
+    if is_preset_mode; then
+        # Ensure .data section exists for preset-context schema.
+        json=$(printf '%s' "$json" | jq '.data //= {}')
+    fi
+
     for pair in "${pairs[@]}"; do
         local key="${pair%%=*}"
         local value="${pair#*=}"
@@ -60,7 +89,23 @@ cmd_set() {
             value="${value%\"}"
         fi
 
-        json=$(printf '%s' "$json" | jq --arg k "$key" --arg v "$value" '.[$k] = $v')
+        if is_preset_mode; then
+            # Parse dotted notation and set nested values under .data.
+            local -a path_parts=("data")
+            local -a key_parts=()
+            IFS='.' read -ra key_parts <<< "$key"
+            local part
+            for part in "${key_parts[@]}"; do
+                path_parts+=("$part")
+            done
+
+            local path_json
+            path_json=$(printf '%s\n' "${path_parts[@]}" | jq -R . | jq -s .)
+            json=$(printf '%s' "$json" | jq --argjson path "$path_json" --arg v "$value" 'setpath($path; $v)')
+        else
+            # Legacy behavior for global-context.json and other flat files.
+            json=$(printf '%s' "$json" | jq --arg k "$key" --arg v "$value" '.[$k] = $v')
+        fi
     done
 
     local dir
@@ -76,8 +121,23 @@ cmd_clear() {
         echo "Nothing to clear — $TARGET_FILE does not exist."
         return 0
     fi
-    rm "$TARGET_FILE"
-    echo "Cleared $TARGET_FILE"
+
+    if is_preset_mode; then
+        # Clear only data; preserve flow and delete file only when both are empty.
+        local result
+        result=$(jq 'if has("data") then .data = {} else . end' "$TARGET_FILE")
+        if is_preset_json_empty_string "$result"; then
+            rm "$TARGET_FILE"
+            echo "Cleared $TARGET_FILE"
+        else
+            printf '%s\n' "$result" | jq . > "$TARGET_FILE"
+            echo "Cleared data in $TARGET_FILE (flow preserved)"
+        fi
+    else
+        # Legacy behavior for flat files.
+        rm "$TARGET_FILE"
+        echo "Cleared $TARGET_FILE"
+    fi
 }
 
 cmd_delete() {
@@ -103,12 +163,33 @@ cmd_delete() {
         key="${key%"${key##*[![:space:]]}"}"
         [ -z "$key" ] && continue
 
-        local exists
-        exists=$(jq --arg k "$key" 'has($k)' "$TARGET_FILE")
-        if [ "$exists" = "true" ]; then
-            to_delete+=("$key")
+        if is_preset_mode; then
+            # Support dotted paths for nested keys under .data.
+            local -a path_parts=("data")
+            local -a key_parts=()
+            IFS='.' read -ra key_parts <<< "$key"
+            local part
+            for part in "${key_parts[@]}"; do
+                path_parts+=("$part")
+            done
+            local path_json
+            path_json=$(printf '%s\n' "${path_parts[@]}" | jq -R . | jq -s .)
+
+            local exists
+            exists=$(jq --argjson path "$path_json" 'getpath($path) != null' "$TARGET_FILE" 2>/dev/null || echo "false")
+            if [ "$exists" = "true" ]; then
+                to_delete+=("$key")
+            else
+                not_found+=("$key")
+            fi
         else
-            not_found+=("$key")
+            local exists
+            exists=$(jq --arg k "$key" 'has($k)' "$TARGET_FILE" 2>/dev/null || echo "false")
+            if [ "$exists" = "true" ]; then
+                to_delete+=("$key")
+            else
+                not_found+=("$key")
+            fi
         fi
     done
 
@@ -125,21 +206,65 @@ cmd_delete() {
         return 0
     fi
 
-    local jq_keys_json
-    jq_keys_json=$(printf '%s\n' "${to_delete[@]}" | jq -R . | jq -s .)
-
     local result
-    result=$(jq --argjson keys "$jq_keys_json" 'del(.[$keys[]])' "$TARGET_FILE")
+    if is_preset_mode; then
+        result=$(cat "$TARGET_FILE")
+        local key
+        for key in "${to_delete[@]}"; do
+            local -a path_parts=("data")
+            local -a key_parts=()
+            IFS='.' read -ra key_parts <<< "$key"
+            local part
+            for part in "${key_parts[@]}"; do
+                path_parts+=("$part")
+            done
+            local path_json
+            path_json=$(printf '%s\n' "${path_parts[@]}" | jq -R . | jq -s .)
+            result=$(printf '%s' "$result" | jq --argjson path "$path_json" 'delpaths([$path])')
+        done
 
-    if [ "$result" = "{}" ]; then
-        rm "$TARGET_FILE"
-        echo "All keys removed. Deleted $TARGET_FILE."
-    else
+        # Remove empty nested objects left by dotted-path deletions.
+        result=$(printf '%s' "$result" | jq '
+            def prune_empty:
+                if type == "object" then
+                    with_entries(.value |= prune_empty)
+                    | with_entries(select(.value != {} and .value != [] and .value != null))
+                elif type == "array" then
+                    map(prune_empty)
+                    | map(select(. != {} and . != [] and . != null))
+                else . end;
+            .data = ((.data // {}) | prune_empty)
+        ')
+
+        if is_preset_json_empty_string "$result"; then
+            rm "$TARGET_FILE"
+            echo "All data keys removed. Deleted $TARGET_FILE."
+            return 0
+        fi
+
         printf '%s\n' "$result" | jq . > "$TARGET_FILE"
         local deleted_str=""
-        for k in "${to_delete[@]}"; do
+        for key in "${to_delete[@]}"; do
             [[ -n "$deleted_str" ]] && deleted_str+=", "
-            deleted_str+="$k"
+            deleted_str+="$key"
+        done
+        echo "Deleted from data: $deleted_str"
+    else
+        local jq_keys_json
+        jq_keys_json=$(printf '%s\n' "${to_delete[@]}" | jq -R . | jq -s .)
+        result=$(jq --argjson keys "$jq_keys_json" 'del(.[$keys[]])' "$TARGET_FILE")
+        if [ "$result" = "{}" ]; then
+            rm "$TARGET_FILE"
+            echo "All keys removed. Deleted $TARGET_FILE."
+            return 0
+        fi
+
+        printf '%s\n' "$result" | jq . > "$TARGET_FILE"
+        local deleted_str=""
+        local key
+        for key in "${to_delete[@]}"; do
+            [[ -n "$deleted_str" ]] && deleted_str+=", "
+            deleted_str+="$key"
         done
         echo "Deleted: $deleted_str"
     fi
@@ -147,27 +272,57 @@ cmd_delete() {
 
 cmd_help() {
     local script_name="$1"
-    cat <<EOF
+    if is_preset_mode; then
+        cat <<EOF
 Usage: $script_name <operation> [args]
 
+Mode:
+   preset                  Values are stored under "data" in preset-context.json
+
 Operations:
-  list                     Display current values (or a message if none are set)
-  set <pairs>              Set one or more key=value pairs (comma-delimited)
-  delete <keys>            Delete one or more keys (comma-delimited)
-  clear                    Delete the entire context file
-  help | h                 Show this help message
+   list                     Display current values (or a message if none are set)
+   set <pairs>              Set one or more key=value pairs under data (comma-delimited)
+   delete <keys>            Delete one or more keys from data (comma-delimited)
+   clear                    Clear data values; preserves flow when present
+   help | h                 Show this help message
 
 Examples:
-  $script_name list
-  $script_name set BASE_URL="https://staging.example.com",TENANT=acme
-  $script_name delete BASE_URL,TENANT
-  $script_name clear
+   $script_name list
+   $script_name set BASE_URL="https://staging.example.com",TENANT=acme
+   $script_name set user.username="qa_user",user.password="secret"
+   $script_name delete BASE_URL,TENANT
+   $script_name clear
 
 Notes:
-  - Key names are case-sensitive.
-  - Values may be quoted or unquoted.
-  - Deleting all keys removes the file automatically.
+   - Key names are case-sensitive.
+   - Values may be quoted or unquoted.
+   - Dotted keys (e.g., "user.username") are nested under "data".
 EOF
+    else
+        cat <<EOF
+Usage: $script_name <operation> [args]
+
+Mode:
+   flat                    Values are stored as root-level keys in JSON
+
+Operations:
+   list                     Display current values (or a message if none are set)
+   set <pairs>              Set one or more key=value pairs (comma-delimited)
+   delete <keys>            Delete one or more keys (comma-delimited)
+   clear                    Delete the entire context file
+   help | h                 Show this help message
+
+Examples:
+   $script_name list
+   $script_name set BASE_URL="https://staging.example.com",TENANT=acme
+   $script_name delete BASE_URL,TENANT
+   $script_name clear
+
+Notes:
+   - Key names are case-sensitive.
+   - Values may be quoted or unquoted.
+EOF
+    fi
 }
 
 run_context_ops() {

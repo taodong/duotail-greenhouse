@@ -261,7 +261,8 @@ manage-global-constants -ap /tmp/my-agent set BASE_URL="https://local.example.co
 
 ## manage-context-variables Usage
 
-`manage-context-variables` manages key/value entries in `$AGENT_PATH/instructions/preset-context.json`. It has the same interface as `manage-global-constants` but targets the preset context file, which is used to supply per-run variable overrides on top of the global context.
+`manage-context-variables` manages runtime preset values in `$AGENT_PATH/instructions/preset-context.json`.
+It keeps the same CLI interface as `manage-global-constants`, but writes values under the `data` field in the preset schema.
 
 ```bash
 manage-context-variables [-ap <agent-path>] <operation> [args]
@@ -276,9 +277,9 @@ manage-context-variables [-ap <agent-path>] <operation> [args]
 | Operation | Arguments | Description |
 | --- | --- | --- |
 | `list` | — | Display all current values, or a message if none are set |
-| `set` | `KEY=value,...` | Set one or more key/value pairs (comma-delimited) |
-| `delete` | `KEY,...` | Delete one or more keys by name (comma-delimited) |
-| `clear` | — | Delete the entire context file |
+| `set` | `KEY=value,...` | Set one or more key/value pairs under `data` (comma-delimited) |
+| `delete` | `KEY,...` | Delete one or more keys from `data` (supports dotted paths) |
+| `clear` | — | Clear `data`; keep `flow` if present |
 | `help` / `h` | — | Show usage |
 
 ### Examples
@@ -286,13 +287,16 @@ manage-context-variables [-ap <agent-path>] <operation> [args]
 # List all values
 manage-context-variables list
 
-# Set preset overrides
+# Set preset overrides (stored under data)
 manage-context-variables set username=admin,password=123456789
 
-# Remove a specific key
-manage-context-variables delete username
+# Set nested values with dotted keys
+manage-context-variables set user.username=admin,user.password=123456789
 
-# Clear all preset context
+# Remove keys from data (supports dotted keys)
+manage-context-variables delete username,user.password
+
+# Clear preset data (flow is preserved if present)
 manage-context-variables clear
 
 # Use a custom agent path
@@ -303,7 +307,9 @@ manage-context-variables -ap /tmp/my-agent list
 - Key names are case-sensitive.
 - Values may be quoted or unquoted.
 - `set` creates the file and parent directories if they do not exist.
-- Deleting all keys removes the file automatically.
+- In `preset-context.json`, managed values are stored under `data`.
+- Dotted keys are consolidated into nested objects (for example: `user.username=abc` -> `{"data":{"user":{"username":"abc"}}}`).
+- The file is deleted only when both `data` and `flow` are missing/empty.
 - Unknown key names in `delete` print a warning but do not cause an error; any found keys are still deleted.
 
 ---
@@ -353,7 +359,22 @@ Global variables shared across all tests are stored in `$AGENT_PATH/instructions
 Use `manage-global-constants` to read and update this file without editing JSON directly. See [manage-global-constants Usage](#manage-global-constants-usage).
 
 ### Preset Context
-Per-run variable overrides are stored in `$AGENT_PATH/instructions/preset-context.json`, using the same JSON format as global context. These values can selectively override or extend the global context for a specific test run.
+Per-run overrides are stored in `$AGENT_PATH/instructions/preset-context.json` using this schema:
+
+```json
+{
+    "data": {
+        "baseUrl": "http://host.docker.internal:8080",
+        "user": {
+            "username": "qa_user"
+        }
+    },
+    "flow": []
+}
+```
+
+`manage-context-variables` manages only the `data` section.
+`manage-global-constants` behavior is unchanged and still manages the flat `global-context.json` format.
 
 Use `manage-context-variables` to read and update this file. See [manage-context-variables Usage](#manage-context-variables-usage).
 

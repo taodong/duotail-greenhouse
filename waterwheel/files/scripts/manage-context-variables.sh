@@ -10,6 +10,7 @@ if [[ "${1:-}" == "-ap" ]]; then
 fi
 
 TARGET_FILE="${AGENT_PATH}/instructions/preset-context.json"
+CONTEXT_OPS_MODE="preset"
 
 # shellcheck source=context-ops-lib.sh
 # Support both development (.sh) and container (no extension) installs.
