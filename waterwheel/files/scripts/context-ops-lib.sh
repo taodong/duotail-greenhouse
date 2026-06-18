@@ -1,41 +1,108 @@
 #!/usr/bin/env bash
 # Shared library for managing JSON context files.
-# Callers must set TARGET_FILE before sourcing this script.
+# Callers pass the target file path to run_context_ops.
+
+context_ops_trim() {
+    local value="$1"
+    value="${value#"${value%%[![:space:]]*}"}"
+    value="${value%"${value##*[![:space:]]}"}"
+    printf '%s' "$value"
+}
+
+context_ops_build_path_json() {
+    local key="$1"
+    local -a path_parts=()
+    local prefix="${CONTEXT_PATH_PREFIX:-}"
+    local -a prefix_parts=()
+    local -a key_parts=()
+    local part
+
+    if [ -n "$prefix" ]; then
+        IFS='.' read -ra prefix_parts <<< "$prefix"
+        for part in "${prefix_parts[@]}"; do
+            [ -n "$part" ] && path_parts+=("$part")
+        done
+    fi
+
+    if [ -n "$key" ]; then
+        IFS='.' read -ra key_parts <<< "$key"
+        for part in "${key_parts[@]}"; do
+            [ -n "$part" ] && path_parts+=("$part")
+        done
+    fi
+
+    if [ ${#path_parts[@]} -eq 0 ]; then
+        printf '[]\n'
+        return 0
+    fi
+
+    printf '%s\n' "${path_parts[@]}" | jq -R . | jq -s .
+}
+
+context_ops_prune_json() {
+    local json="$1"
+    local path_json="${2:-}"
+
+    if [ -z "$path_json" ]; then
+        printf '%s' "$json" | jq '
+            def prune_empty:
+                if type == "object" then
+                    with_entries(.value |= prune_empty)
+                    | with_entries(select(.value != {} and .value != [] and .value != null))
+                elif type == "array" then
+                    map(prune_empty)
+                    | map(select(. != {} and . != [] and . != null))
+                else . end;
+            prune_empty
+        '
+    else
+        printf '%s' "$json" | jq --argjson path "$path_json" '
+            def prune_empty:
+                if type == "object" then
+                    with_entries(.value |= prune_empty)
+                    | with_entries(select(.value != {} and .value != [] and .value != null))
+                elif type == "array" then
+                    map(prune_empty)
+                    | map(select(. != {} and . != [] and . != null))
+                else . end;
+            setpath($path; ((getpath($path) // {}) | prune_empty))
+        '
+    fi
+}
+
+context_ops_is_empty_json() {
+    local json="$1"
+    local query="${CONTEXT_EMPTY_CHECK_QUERY:-length == 0}"
+    printf '%s' "$json" | jq -e "$query" >/dev/null 2>&1
+}
+
+context_ops_compact_keys() {
+    local -a keys=("$@")
+    local output=""
+    local key
+    for key in "${keys[@]}"; do
+        [[ -n "$output" ]] && output+=", "
+        output+="$key"
+    done
+    printf '%s' "$output"
+}
 
 cmd_list() {
-    if [ ! -f "$TARGET_FILE" ]; then
-        if is_preset_mode; then
-            echo "No context values are set."
-        else
-            echo "No global values are set."
-        fi
+    local target_file="$1"
+    local empty_message="${CONTEXT_LIST_EMPTY_MESSAGE:-No global values are set.}"
+    local query="${CONTEXT_LIST_QUERY:-.}"
+
+    if [ ! -f "$target_file" ]; then
+        echo "$empty_message"
         return 0
     fi
-    jq . "$TARGET_FILE"
-}
 
-# Context modes:
-# - flat   (default): legacy root-level key/value JSON
-# - preset: preset-context.json with {data, flow} shape
-is_preset_mode() {
-    [ "${CONTEXT_OPS_MODE:-flat}" = "preset" ]
-}
-
-is_preset_json_empty_file() {
-    local file="$1"
-    if [ ! -f "$file" ]; then
-        return 0
-    fi
-    jq -e '((.data // {}) | length == 0) and ((.flow // []) | length == 0)' "$file" >/dev/null 2>&1
-}
-
-is_preset_json_empty_string() {
-    local json="$1"
-    printf '%s' "$json" | jq -e '((.data // {}) | length == 0) and ((.flow // []) | length == 0)' >/dev/null 2>&1
+    jq "$query" "$target_file"
 }
 
 cmd_set() {
-    local pairs_string="$1"
+    local target_file="$1"
+    local pairs_string="$2"
 
     if [ -z "$pairs_string" ]; then
         echo "ERROR: set requires key=value pairs (e.g. KEY=val,OTHER=\"quoted val\")." >&2
@@ -46,6 +113,7 @@ cmd_set() {
     local -a pairs=()
     local current=""
     local in_quote=0
+    local i
 
     for ((i = 0; i < ${#pairs_string}; i++)); do
         local char="${pairs_string:$i:1}"
@@ -62,94 +130,79 @@ cmd_set() {
     [[ -n "$current" ]] && pairs+=("$current")
 
     local json="{}"
-    if [ -f "$TARGET_FILE" ]; then
-        json=$(cat "$TARGET_FILE")
+    if [ -f "$target_file" ]; then
+        json=$(cat "$target_file")
     fi
 
-    if is_preset_mode; then
-        # Ensure .data section exists for preset-context schema.
-        json=$(printf '%s' "$json" | jq '.data //= {}')
-    fi
-
+    local pair
     for pair in "${pairs[@]}"; do
         local key="${pair%%=*}"
         local value="${pair#*=}"
 
-        key="${key#"${key%%[![:space:]]*}"}"
-        key="${key%"${key##*[![:space:]]}"}"
+        key=$(context_ops_trim "$key")
 
         if [ -z "$key" ]; then
             echo "WARNING: skipping empty key in pair: $pair" >&2
             continue
         fi
 
-        # Strip surrounding double quotes from value.
         if [[ "$value" == '"'*'"' ]]; then
             value="${value#\"}"
             value="${value%\"}"
         fi
 
-        if is_preset_mode; then
-            # Parse dotted notation and set nested values under .data.
-            local -a path_parts=("data")
-            local -a key_parts=()
-            IFS='.' read -ra key_parts <<< "$key"
-            local part
-            for part in "${key_parts[@]}"; do
-                path_parts+=("$part")
-            done
-
-            local path_json
-            path_json=$(printf '%s\n' "${path_parts[@]}" | jq -R . | jq -s .)
-            json=$(printf '%s' "$json" | jq --argjson path "$path_json" --arg v "$value" 'setpath($path; $v)')
-        else
-            # Legacy behavior for global-context.json and other flat files.
-            json=$(printf '%s' "$json" | jq --arg k "$key" --arg v "$value" '.[$k] = $v')
-        fi
+        local path_json
+        path_json=$(context_ops_build_path_json "$key")
+        json=$(printf '%s' "$json" | jq --argjson path "$path_json" --arg v "$value" 'setpath($path; $v)')
     done
 
     local dir
-    dir=$(dirname "$TARGET_FILE")
+    dir=$(dirname "$target_file")
     mkdir -p "$dir"
 
-    printf '%s\n' "$json" | jq . > "$TARGET_FILE"
-    echo "Updated $TARGET_FILE"
+    printf '%s\n' "$json" | jq . > "$target_file"
+    echo "Updated $target_file"
 }
 
 cmd_clear() {
-    if [ ! -f "$TARGET_FILE" ]; then
-        echo "Nothing to clear — $TARGET_FILE does not exist."
+    local target_file="$1"
+
+    if [ ! -f "$target_file" ]; then
+        echo "Nothing to clear — $target_file does not exist."
         return 0
     fi
 
-    if is_preset_mode; then
-        # Clear only data; preserve flow and delete file only when both are empty.
-        local result
-        result=$(jq 'if has("data") then .data = {} else . end' "$TARGET_FILE")
-        if is_preset_json_empty_string "$result"; then
-            rm "$TARGET_FILE"
-            echo "Cleared $TARGET_FILE"
-        else
-            printf '%s\n' "$result" | jq . > "$TARGET_FILE"
-            echo "Cleared data in $TARGET_FILE (flow preserved)"
-        fi
-    else
-        # Legacy behavior for flat files.
-        rm "$TARGET_FILE"
-        echo "Cleared $TARGET_FILE"
+    if [ "${CONTEXT_CLEAR_DELETE_FILE_ONLY:-true}" = "true" ]; then
+        rm "$target_file"
+        echo "Cleared $target_file"
+        return 0
     fi
+
+    local clear_expr="${CONTEXT_CLEAR_SET_EXPR:-.}"
+    local result
+    result=$(jq "$clear_expr" "$target_file")
+
+    if context_ops_is_empty_json "$result"; then
+        rm "$target_file"
+        echo "Cleared $target_file"
+        return 0
+    fi
+
+    printf '%s\n' "$result" | jq . > "$target_file"
+    echo "${CONTEXT_CLEAR_SUCCESS_MESSAGE:-Cleared $target_file}"
 }
 
 cmd_delete() {
-    local keys_string="$1"
+    local target_file="$1"
+    local keys_string="$2"
 
     if [ -z "$keys_string" ]; then
         echo "ERROR: delete requires a comma-delimited list of key names." >&2
         return 1
     fi
 
-    if [ ! -f "$TARGET_FILE" ]; then
-        echo "ERROR: $TARGET_FILE does not exist." >&2
+    if [ ! -f "$target_file" ]; then
+        echo "ERROR: $target_file does not exist." >&2
         return 1
     fi
 
@@ -157,49 +210,27 @@ cmd_delete() {
 
     local -a to_delete=()
     local -a not_found=()
+    local raw_key
 
     for raw_key in "${raw_keys[@]}"; do
-        local key="${raw_key#"${raw_key%%[![:space:]]*}"}"
-        key="${key%"${key##*[![:space:]]}"}"
+        local key
+        key=$(context_ops_trim "$raw_key")
         [ -z "$key" ] && continue
 
-        if is_preset_mode; then
-            # Support dotted paths for nested keys under .data.
-            local -a path_parts=("data")
-            local -a key_parts=()
-            IFS='.' read -ra key_parts <<< "$key"
-            local part
-            for part in "${key_parts[@]}"; do
-                path_parts+=("$part")
-            done
-            local path_json
-            path_json=$(printf '%s\n' "${path_parts[@]}" | jq -R . | jq -s .)
+        local path_json
+        path_json=$(context_ops_build_path_json "$key")
 
-            local exists
-            exists=$(jq --argjson path "$path_json" 'getpath($path) != null' "$TARGET_FILE" 2>/dev/null || echo "false")
-            if [ "$exists" = "true" ]; then
-                to_delete+=("$key")
-            else
-                not_found+=("$key")
-            fi
+        local exists
+        exists=$(jq --argjson path "$path_json" 'getpath($path) != null' "$target_file" 2>/dev/null || echo "false")
+        if [ "$exists" = "true" ]; then
+            to_delete+=("$key")
         else
-            local exists
-            exists=$(jq --arg k "$key" 'has($k)' "$TARGET_FILE" 2>/dev/null || echo "false")
-            if [ "$exists" = "true" ]; then
-                to_delete+=("$key")
-            else
-                not_found+=("$key")
-            fi
+            not_found+=("$key")
         fi
     done
 
     if [ ${#not_found[@]} -gt 0 ]; then
-        local warn_str=""
-        for k in "${not_found[@]}"; do
-            [[ -n "$warn_str" ]] && warn_str+=", "
-            warn_str+="$k"
-        done
-        echo "WARNING: unknown keys: $warn_str"
+        echo "WARNING: unknown keys: $(context_ops_compact_keys "${not_found[@]}")"
     fi
 
     if [ ${#to_delete[@]} -eq 0 ]; then
@@ -207,83 +238,47 @@ cmd_delete() {
     fi
 
     local result
-    if is_preset_mode; then
-        result=$(cat "$TARGET_FILE")
-        local key
-        for key in "${to_delete[@]}"; do
-            local -a path_parts=("data")
-            local -a key_parts=()
-            IFS='.' read -ra key_parts <<< "$key"
-            local part
-            for part in "${key_parts[@]}"; do
-                path_parts+=("$part")
-            done
-            local path_json
-            path_json=$(printf '%s\n' "${path_parts[@]}" | jq -R . | jq -s .)
-            result=$(printf '%s' "$result" | jq --argjson path "$path_json" 'delpaths([$path])')
-        done
+    result=$(cat "$target_file")
 
-        # Remove empty nested objects left by dotted-path deletions.
-        result=$(printf '%s' "$result" | jq '
-            def prune_empty:
-                if type == "object" then
-                    with_entries(.value |= prune_empty)
-                    | with_entries(select(.value != {} and .value != [] and .value != null))
-                elif type == "array" then
-                    map(prune_empty)
-                    | map(select(. != {} and . != [] and . != null))
-                else . end;
-            .data = ((.data // {}) | prune_empty)
-        ')
+    local key
+    for key in "${to_delete[@]}"; do
+        local path_json
+        path_json=$(context_ops_build_path_json "$key")
+        result=$(printf '%s' "$result" | jq --argjson path "$path_json" 'delpaths([$path])')
+    done
 
-        if is_preset_json_empty_string "$result"; then
-            rm "$TARGET_FILE"
-            echo "All data keys removed. Deleted $TARGET_FILE."
-            return 0
-        fi
-
-        printf '%s\n' "$result" | jq . > "$TARGET_FILE"
-        local deleted_str=""
-        for key in "${to_delete[@]}"; do
-            [[ -n "$deleted_str" ]] && deleted_str+=", "
-            deleted_str+="$key"
-        done
-        echo "Deleted from data: $deleted_str"
+    if [ -n "${CONTEXT_PATH_PREFIX:-}" ]; then
+        local prefix_path_json
+        prefix_path_json=$(context_ops_build_path_json "")
+        result=$(context_ops_prune_json "$result" "$prefix_path_json")
     else
-        local jq_keys_json
-        jq_keys_json=$(printf '%s\n' "${to_delete[@]}" | jq -R . | jq -s .)
-        result=$(jq --argjson keys "$jq_keys_json" 'del(.[$keys[]])' "$TARGET_FILE")
-        if [ "$result" = "{}" ]; then
-            rm "$TARGET_FILE"
-            echo "All keys removed. Deleted $TARGET_FILE."
-            return 0
-        fi
-
-        printf '%s\n' "$result" | jq . > "$TARGET_FILE"
-        local deleted_str=""
-        local key
-        for key in "${to_delete[@]}"; do
-            [[ -n "$deleted_str" ]] && deleted_str+=", "
-            deleted_str+="$key"
-        done
-        echo "Deleted: $deleted_str"
+        result=$(context_ops_prune_json "$result")
     fi
+
+    if context_ops_is_empty_json "$result"; then
+        rm "$target_file"
+        if [ -n "${CONTEXT_DELETE_EMPTY_MESSAGE:-}" ]; then
+            echo "$CONTEXT_DELETE_EMPTY_MESSAGE"
+        else
+            echo "All keys removed. Deleted $target_file."
+        fi
+        return 0
+    fi
+
+    printf '%s\n' "$result" | jq . > "$target_file"
+    echo "Deleted: $(context_ops_compact_keys "${to_delete[@]}")"
 }
 
 cmd_help() {
     local script_name="$1"
-    if is_preset_mode; then
-        cat <<EOF
+    cat <<EOF
 Usage: $script_name <operation> [args]
-
-Mode:
-   preset                  Values are stored under "data" in preset-context.json
 
 Operations:
    list                     Display current values (or a message if none are set)
-   set <pairs>              Set one or more key=value pairs under data (comma-delimited)
-   delete <keys>            Delete one or more keys from data (comma-delimited)
-   clear                    Clear data values; preserves flow when present
+   set <pairs>              Set one or more key=value pairs (comma-delimited)
+   delete <keys>            Delete one or more keys (comma-delimited)
+   clear                    Clear the context file or managed subtree
    help | h                 Show this help message
 
 Examples:
@@ -296,54 +291,56 @@ Examples:
 Notes:
    - Key names are case-sensitive.
    - Values may be quoted or unquoted.
-   - Dotted keys (e.g., "user.username") are nested under "data".
+   - Dotted keys create nested objects (for example: user.username=abc -> {"user":{"username":"abc"}}).
 EOF
-    else
-        cat <<EOF
-Usage: $script_name <operation> [args]
-
-Mode:
-   flat                    Values are stored as root-level keys in JSON
-
-Operations:
-   list                     Display current values (or a message if none are set)
-   set <pairs>              Set one or more key=value pairs (comma-delimited)
-   delete <keys>            Delete one or more keys (comma-delimited)
-   clear                    Delete the entire context file
-   help | h                 Show this help message
-
-Examples:
-   $script_name list
-   $script_name set BASE_URL="https://staging.example.com",TENANT=acme
-   $script_name delete BASE_URL,TENANT
-   $script_name clear
-
-Notes:
-   - Key names are case-sensitive.
-   - Values may be quoted or unquoted.
-EOF
-    fi
 }
 
 run_context_ops() {
     local script_name="$1"
-    shift
+    local target_file="$2"
+    shift 2
+
+    if [ -z "$target_file" ]; then
+        echo "ERROR: target file is required for run_context_ops." >&2
+        return 1
+    fi
+
     local operation="${1:-}"
 
     case "$operation" in
         list)
-            cmd_list
+            if [ $# -ne 1 ]; then
+                echo "ERROR: list does not accept additional arguments." >&2
+                return 1
+            fi
+            cmd_list "$target_file"
             ;;
         set)
-            cmd_set "${2:-}"
+            if [ $# -ne 2 ]; then
+                echo "ERROR: set requires exactly one comma-delimited key=value argument." >&2
+                return 1
+            fi
+            cmd_set "$target_file" "${2:-}"
             ;;
         delete)
-            cmd_delete "${2:-}"
+            if [ $# -ne 2 ]; then
+                echo "ERROR: delete requires exactly one comma-delimited key list." >&2
+                return 1
+            fi
+            cmd_delete "$target_file" "${2:-}"
             ;;
         clear)
-            cmd_clear
+            if [ $# -ne 1 ]; then
+                echo "ERROR: clear does not accept additional arguments." >&2
+                return 1
+            fi
+            cmd_clear "$target_file"
             ;;
         help | h | --help | -h)
+            if [ $# -ne 1 ]; then
+                echo "ERROR: help does not accept additional arguments." >&2
+                return 1
+            fi
             cmd_help "$script_name"
             ;;
         "")

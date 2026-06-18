@@ -1,21 +1,6 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-AGENT_PATH="${AGENT_PATH:-/agent}"
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-
-if [[ "${1:-}" == "-ap" ]]; then
-    AGENT_PATH="$2"
-    shift 2
-fi
-
-TARGET_FILE="${AGENT_PATH}/instructions/preset-context.json"
-CONTEXT_OPS_MODE="preset"
-
-# shellcheck source=context-ops-lib.sh
-# Support both development (.sh) and container (no extension) installs.
-_LIB="${SCRIPT_DIR}/context-ops-lib"
-# shellcheck disable=SC1090
-source "${_LIB}.sh" 2>/dev/null || source "${_LIB}"
-
-run_context_ops "manage-context-variables" "$@"
+echo "ERROR: manage-context-variables has been replaced by preset-context." >&2
+echo "Use 'preset-context variables ...' or 'preset-context flow <file-path>' instead." >&2
+exit 1

@@ -10,7 +10,6 @@ if [[ "${1:-}" == "-ap" ]]; then
 fi
 
 TARGET_FILE="${AGENT_PATH}/instructions/global-context.json"
-CONTEXT_OPS_MODE="flat"
 
 # shellcheck source=context-ops-lib.sh
 # Support both development (.sh) and container (no extension) installs.
@@ -18,4 +17,4 @@ _LIB="${SCRIPT_DIR}/context-ops-lib"
 # shellcheck disable=SC1090
 source "${_LIB}.sh" 2>/dev/null || source "${_LIB}"
 
-run_context_ops "manage-global-constants" "$@"
+run_context_ops "manage-global-constants" "$TARGET_FILE" "$@"

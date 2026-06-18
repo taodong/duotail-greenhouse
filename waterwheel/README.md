@@ -210,6 +210,7 @@ get-failure-detail -ap /tmp/my-agent -d
 ## manage-global-constants Usage
 
 `manage-global-constants` manages key/value entries in `$AGENT_PATH/instructions/global-context.json`. These values are injected into every test run as shared global variables (base URLs, tenant IDs, credentials, etc.).
+It also supports dotted keys for nested JSON objects (for example, `user.username=qa_user` becomes `{ "user": { "username": "qa_user" } }`).
 
 ```bash
 manage-global-constants [-ap <agent-path>] <operation> [args]
@@ -237,6 +238,9 @@ manage-global-constants list
 # Set multiple values (quoted and unquoted)
 manage-global-constants set BASE_URL="https://staging.example.com",TENANT=acme,SUPPORT_EMAIL=qa@example.com
 
+# Set nested values at the root
+manage-global-constants set user.username=qa_user,user.password=secret
+
 # Overwrite an existing key
 manage-global-constants set TENANT=newcorp
 
@@ -255,17 +259,22 @@ manage-global-constants -ap /tmp/my-agent set BASE_URL="https://local.example.co
 - Values may be quoted or unquoted.
 - `set` creates the file and parent directories if they do not exist.
 - Deleting all keys removes the file automatically.
+- Dotted keys create nested objects.
 - Unknown key names in `delete` print a warning but do not cause an error; any found keys are still deleted.
 
 ---
 
-## manage-context-variables Usage
+## preset-context Usage
 
-`manage-context-variables` manages runtime preset values in `$AGENT_PATH/instructions/preset-context.json`.
-It keeps the same CLI interface as `manage-global-constants`, but writes values under the `data` field in the preset schema.
+`preset-context` manages `$AGENT_PATH/instructions/preset-context.json` through two mutually exclusive families:
+
+- `variables` manages runtime values under `data`
+- `flow` imports a JSON file containing `{"flow":[...]}` or clears the stored `flow` array
+
+The two families are exclusive in a single command call. Mixed invocations are rejected.
 
 ```bash
-manage-context-variables [-ap <agent-path>] <operation> [args]
+preset-context [-ap <agent-path>] <family> [args]
 ```
 
 ### Options
@@ -273,7 +282,7 @@ manage-context-variables [-ap <agent-path>] <operation> [args]
 | --- | --- |
 | `-ap <path>` | Override the agent path (default: `/agent`) |
 
-### Operations
+### `variables` operations
 | Operation | Arguments | Description |
 | --- | --- | --- |
 | `list` | — | Display all current values, or a message if none are set |
@@ -282,25 +291,52 @@ manage-context-variables [-ap <agent-path>] <operation> [args]
 | `clear` | — | Clear `data`; keep `flow` if present |
 | `help` / `h` | — | Show usage |
 
+### `flow` usage
+| Family | Arguments | Description |
+| --- | --- | --- |
+| `flow` | `flow.json` | Import a file whose top-level object contains `flow`; extra properties are ignored and `.flow` is replaced |
+| `flow` | `clear` | Clear existing `flow` entries; preserve `data` |
+
 ### Examples
 ```bash
 # List all values
-manage-context-variables list
+preset-context variables list
 
 # Set preset overrides (stored under data)
-manage-context-variables set username=admin,password=123456789
+preset-context variables set username=admin,password=123456789
 
 # Set nested values with dotted keys
-manage-context-variables set user.username=admin,user.password=123456789
+preset-context variables set user.username=admin,user.password=123456789
 
 # Remove keys from data (supports dotted keys)
-manage-context-variables delete username,user.password
+preset-context variables delete username,user.password
 
 # Clear preset data (flow is preserved if present)
-manage-context-variables clear
+preset-context variables clear
+
+# Import flow from a JSON file
+preset-context flow ./instructions/preset-flow.json
+
+# Clear flow entries while preserving data
+preset-context flow clear
 
 # Use a custom agent path
-manage-context-variables -ap /tmp/my-agent list
+preset-context -ap /tmp/my-agent variables list
+
+# Mixed family calls are rejected
+preset-context flow ./instructions/preset-flow.json variables set foo=bar
+```
+
+The imported file may contain extra top-level metadata; only the `flow` array is used.
+
+```json
+{
+  "flow": [
+    { "file": "login.md", "node": 1 }
+  ],
+  "data": { "ignored": true },
+  "notes": "also ignored"
+}
 ```
 
 ### Notes
@@ -309,6 +345,9 @@ manage-context-variables -ap /tmp/my-agent list
 - `set` creates the file and parent directories if they do not exist.
 - In `preset-context.json`, managed values are stored under `data`.
 - Dotted keys are consolidated into nested objects (for example: `user.username=abc` -> `{"data":{"user":{"username":"abc"}}}`).
+- `flow` accepts either `clear` or a file path.
+- When a file path is provided, the imported JSON must contain a top-level `flow` array; extra properties are ignored.
+- `variables` and `flow` are mutually exclusive in a single call.
 - The file is deleted only when both `data` and `flow` are missing/empty.
 - Unknown key names in `delete` print a warning but do not cause an error; any found keys are still deleted.
 
@@ -346,7 +385,7 @@ batchSize: 100
 ```
 
 ### Global Context
-Global variables shared across all tests are stored in `$AGENT_PATH/instructions/global-context.json`. The file contains a flat JSON object of string key/value pairs.
+Global variables shared across all tests are stored in `$AGENT_PATH/instructions/global-context.json`. The file contains a JSON object that supports nested keys via dotted notation.
 
 ```json
 {
@@ -373,10 +412,11 @@ Per-run overrides are stored in `$AGENT_PATH/instructions/preset-context.json` u
 }
 ```
 
-`manage-context-variables` manages only the `data` section.
-`manage-global-constants` behavior is unchanged and still manages the flat `global-context.json` format.
+`preset-context variables` manages only the `data` section.
+`preset-context flow` imports a file-path wrapper object and replaces only the `flow` section, or `preset-context flow clear` clears `flow`.
+`manage-global-constants` behavior is unchanged except that it now also supports dotted keys for nested JSON in `global-context.json`.
 
-Use `manage-context-variables` to read and update this file. See [manage-context-variables Usage](#manage-context-variables-usage).
+Use `preset-context` to read and update this file. See [preset-context Usage](#preset-context-usage).
 
 ## Security & Permissions
 
@@ -402,7 +442,7 @@ Use `manage-context-variables` to read and update this file. See [manage-context
 | `/usr/local/bin/config-agent`               | `root:root` | `700` | Cannot execute | Script to quickly config the agent                        |
 | `/usr/local/bin/run-qa-lib`                 | `root:root` | `700` | Cannot execute | Shared library sourced by `run-qa`, `stop-qa`, `check-test-result` |
 | `/usr/local/bin/manage-global-constants`    | `root:root` | `700` | Cannot execute | Manages entries in `global-context.json`                  |
-| `/usr/local/bin/manage-context-variables`   | `root:root` | `700` | Cannot execute | Manages entries in `preset-context.json`                  |
+| `/usr/local/bin/preset-context`             | `root:root` | `700` | Cannot execute | Manages entries in `preset-context.json`                  |
 | `/etc/profile.d/container_env.sh`           | `root:root` | `644` | Read-only | Environment variables forwarded from root to `agentuser`  |
 
 ### Command Availability Matrix
@@ -415,7 +455,7 @@ Use `manage-context-variables` to read and update this file. See [manage-context
 | `get-failure-detail`       | ✅ | ❌ | `/usr/local/bin/get-failure-detail` (mode `700`)         |
 | `config-agent`             | ✅ | ❌ | `/usr/local/bin/config-agent` (mode `700`)               |
 | `manage-global-constants`  | ✅ | ❌ | `/usr/local/bin/manage-global-constants` (mode `700`)    |
-| `manage-context-variables` | ✅ | ❌ | `/usr/local/bin/manage-context-variables` (mode `700`)   |
+| `preset-context`            | ✅ | ❌ | `/usr/local/bin/preset-context` (mode `700`)              |
 | `playwright-mcp`           | ✅ | ❌ | Started by Supervisor (`supervisord.conf`)               |
 | `email-mcp`                | ✅ | ❌ | Started by Supervisor (`supervisord.conf`)               |
 | `supervisorctl start/stop` | ✅ | ❌ | Used inside `run-qa.sh`                                  |
