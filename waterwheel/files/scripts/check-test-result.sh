@@ -36,4 +36,4 @@ if [ ! -f "$RESULTS_FILE" ]; then
     exit 0
 fi
 
-cat "$RESULTS_FILE"
+jq -r '.exit_condition' "$RESULTS_FILE" 2>/dev/null || cat "$RESULTS_FILE"

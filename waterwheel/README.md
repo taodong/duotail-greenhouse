@@ -124,7 +124,7 @@ It consolidates logic that was previously duplicated across `run-qa` and `stop-q
 
 ## check-test-result Usage
 
-`check-test-result` prints the content of `$AGENT_PATH/outputs/test-results.json`, or reports the current run status if a test is still in progress.
+`check-test-result` prints the `exit_condition` from `$AGENT_PATH/outputs/test-results.json`, or reports the current run status if a test is still in progress.
 
 ```bash
 check-test-result [-ap <agent-path>]
@@ -139,7 +139,7 @@ check-test-result [-ap <agent-path>]
 | Condition | Output |
 | --- | --- |
 | `run-qa` is currently active | A message indicating testing is in progress, including the orchestrator PID |
-| `test-results.json` exists | The full JSON content of the results file |
+| `test-results.json` exists | The `exit_condition` value from the results file |
 | `test-results.json` missing, `agent.log` missing | `ℹ️  No test results found.` |
 | `test-results.json` missing, `agent.log` exists | `ℹ️  No test results found.` followed by the full content of `agent.log` |
 

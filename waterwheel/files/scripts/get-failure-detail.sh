@@ -40,6 +40,19 @@ if [ ! -f "$RESULTS_FILE" ]; then
     exit 0
 fi
 
+EXIT_CONDITION=$(jq -r '.exit_condition' "$RESULTS_FILE")
+RUN_STATUS=$(jq -r '.status' "$RESULTS_FILE")
+
+if [ "$EXIT_CONDITION" = "All tests passed" ]; then
+    echo "✅ No failed tests found in test results."
+    exit 0
+fi
+
+if [ "$RUN_STATUS" = "incomplete" ]; then
+    echo "⚠️  Run did not complete: ${EXIT_CONDITION}"
+    exit 0
+fi
+
 FAILED_TEST=$(jq 'first(.results[] | select(.status == "failed"))' "$RESULTS_FILE")
 if [ -z "$FAILED_TEST" ] || [ "$FAILED_TEST" = "null" ]; then
     echo "✅ No failed tests found in test results."
