@@ -232,6 +232,7 @@ COPY files/scripts/get-failure-detail.sh /usr/local/bin/get-failure-detail
 COPY files/scripts/context-ops-lib.sh /usr/local/bin/context-ops-lib
 COPY files/scripts/manage-global-constants.sh /usr/local/bin/manage-global-constants
 COPY files/scripts/preset-context.sh /usr/local/bin/preset-context
+COPY files/scripts/manage-test-files.sh /usr/local/bin/manage-test-files
 
 RUN chown root:root /usr/local/bin/playwright-mcp \
                    /usr/local/bin/email-mcp \
@@ -244,7 +245,8 @@ RUN chown root:root /usr/local/bin/playwright-mcp \
                    /usr/local/bin/get-failure-detail \
                    /usr/local/bin/context-ops-lib \
                    /usr/local/bin/manage-global-constants \
-                   /usr/local/bin/preset-context && \
+                   /usr/local/bin/preset-context \
+                   /usr/local/bin/manage-test-files && \
     chmod 700 /usr/local/bin/playwright-mcp \
               /usr/local/bin/email-mcp \
               /usr/local/bin/run-qa \
@@ -256,7 +258,8 @@ RUN chown root:root /usr/local/bin/playwright-mcp \
               /usr/local/bin/get-failure-detail \
               /usr/local/bin/context-ops-lib \
               /usr/local/bin/manage-global-constants \
-              /usr/local/bin/preset-context
+              /usr/local/bin/preset-context \
+              /usr/local/bin/manage-test-files
 
 # -----------------------------------------------------------------------------
 # 7. SUPERVISOR CONFIGURATION

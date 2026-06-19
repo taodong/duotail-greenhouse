@@ -264,6 +264,60 @@ manage-global-constants -ap /tmp/my-agent set BASE_URL="https://local.example.co
 
 ---
 
+## manage-test-files Usage
+
+`manage-test-files` manages markdown task files in `$AGENT_PATH/tasks`.
+
+```bash
+manage-test-files [-ap <agent-path>] <operation> [args]
+```
+
+### Options
+| Option | Description |
+| --- | --- |
+| `-ap <path>` | Override the agent path (default: `/agent`) |
+
+### Operations
+| Operation | Arguments | Description |
+| --- | --- | --- |
+| `list` | — | List `.md` task files with 1-based indexes |
+| `add` | `path1,path2,...` | Add markdown files from file paths and direct directory children; non-markdown files are ignored |
+| `delete` | `selector1,selector2,...` | Delete by 1-based index or exact filename (basename only), best effort |
+| `clear` | — | Delete all markdown task files under `$AGENT_PATH/tasks` |
+| `help` / `h` | — | Show usage |
+
+### Examples
+```bash
+# List current markdown test files
+manage-test-files list
+
+# Add two markdown files
+manage-test-files add ./temp/instructions/test-a.md,./temp/instructions/test-b.md
+
+# Add all direct markdown files from a directory (subdirectories are ignored)
+manage-test-files add ./temp/instructions
+
+# Delete by index
+manage-test-files delete 1,3
+
+# Delete by filename and index in one call
+manage-test-files delete login-flow.md,2
+
+# Clear all markdown task files
+manage-test-files clear
+
+# Use a custom agent path
+manage-test-files -ap /tmp/my-agent add ./temp/instructions
+```
+
+### Notes
+- Only `.md` files are listed and managed.
+- `add` overwrites existing files with the same destination basename silently.
+- Directory import includes only direct child files, not subdirectories.
+- `delete` is best effort: invalid selectors print warnings while valid selectors are still deleted.
+
+---
+
 ## preset-context Usage
 
 `preset-context` manages `$AGENT_PATH/instructions/preset-context.json` through two mutually exclusive families:
@@ -442,6 +496,7 @@ Use `preset-context` to read and update this file. See [preset-context Usage](#p
 | `/usr/local/bin/config-agent`               | `root:root` | `700` | Cannot execute | Script to quickly config the agent                        |
 | `/usr/local/bin/run-qa-lib`                 | `root:root` | `700` | Cannot execute | Shared library sourced by `run-qa`, `stop-qa`, `check-test-result` |
 | `/usr/local/bin/manage-global-constants`    | `root:root` | `700` | Cannot execute | Manages entries in `global-context.json`                  |
+| `/usr/local/bin/manage-test-files`          | `root:root` | `700` | Cannot execute | Manages markdown test files in `/agent/tasks`             |
 | `/usr/local/bin/preset-context`             | `root:root` | `700` | Cannot execute | Manages entries in `preset-context.json`                  |
 | `/etc/profile.d/container_env.sh`           | `root:root` | `644` | Read-only | Environment variables forwarded from root to `agentuser`  |
 
@@ -455,6 +510,7 @@ Use `preset-context` to read and update this file. See [preset-context Usage](#p
 | `get-failure-detail`       | ✅ | ❌ | `/usr/local/bin/get-failure-detail` (mode `700`)         |
 | `config-agent`             | ✅ | ❌ | `/usr/local/bin/config-agent` (mode `700`)               |
 | `manage-global-constants`  | ✅ | ❌ | `/usr/local/bin/manage-global-constants` (mode `700`)    |
+| `manage-test-files`        | ✅ | ❌ | `/usr/local/bin/manage-test-files` (mode `700`)          |
 | `preset-context`            | ✅ | ❌ | `/usr/local/bin/preset-context` (mode `700`)              |
 | `playwright-mcp`           | ✅ | ❌ | Started by Supervisor (`supervisord.conf`)               |
 | `email-mcp`                | ✅ | ❌ | Started by Supervisor (`supervisord.conf`)               |
