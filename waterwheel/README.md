@@ -327,7 +327,7 @@ manage-test-files -ap /tmp/my-agent add ./temp/instructions
 `preset-context` manages `$AGENT_PATH/instructions/preset-context.json` through two mutually exclusive families:
 
 - `variables` manages runtime values under `data`
-- `flow` imports a JSON file containing `{"flow":[...]}` or clears the stored `flow` array
+- `flow` lists, imports, or clears the stored `flow` array
 
 The two families are exclusive in a single command call. Mixed invocations are rejected.
 
@@ -352,6 +352,7 @@ preset-context [-ap <agent-path>] <family> [args]
 ### `flow` usage
 | Family | Arguments | Description |
 | --- | --- | --- |
+| `flow` | `list` | Display the current flow entries, or a message if none are set |
 | `flow` | `flow.json` | Import a file whose top-level object contains `flow`; extra properties are ignored and `.flow` is replaced |
 | `flow` | `clear` | Clear existing `flow` entries; preserve `data` |
 
@@ -378,6 +379,9 @@ preset-context flow ./instructions/preset-flow.json
 # Clear flow entries while preserving data
 preset-context flow clear
 
+# List current flow entries
+preset-context flow list
+
 # Use a custom agent path
 preset-context -ap /tmp/my-agent variables list
 
@@ -403,7 +407,8 @@ The imported file may contain extra top-level metadata; only the `flow` array is
 - `set` creates the file and parent directories if they do not exist.
 - In `preset-context.json`, managed values are stored under `data`.
 - Dotted keys are consolidated into nested objects (for example: `user.username=abc` -> `{"data":{"user":{"username":"abc"}}}`).
-- `flow` accepts either `clear` or a file path.
+- `flow` accepts `list`, `clear`, or a file path.
+- When `list` is used, flow entries in `preset-context.json` are printed; if none are set, a message is shown.
 - When a file path is provided, the imported JSON must contain a top-level `flow` array; extra properties are ignored.
 - `variables` and `flow` are mutually exclusive in a single call.
 - The file is deleted only when both `data` and `flow` are missing/empty.

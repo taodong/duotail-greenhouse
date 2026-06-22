@@ -27,17 +27,19 @@ Usage: preset-context [-ap <agent-path>] <family> [args]
 
 Families:
    variables               Manage runtime values stored under .data
-   flow                    Import or clear runtime flow definitions in .flow
+   flow                    List, import, or clear runtime flow definitions in .flow
 
 Notes:
    - Variables and flow are mutually exclusive in a single call.
    - Flow import is file-path only and requires a JSON object containing {"flow":[...]}.
+   - Use "preset-context flow list" to display existing flow entries.
    - Use "preset-context flow clear" to clear existing flow entries.
    - Mixed commands such as "preset-context flow ./flow.json variables set ..." are rejected.
 
 Examples:
    preset-context variables list
    preset-context variables set username=admin,user.password=secret
+   preset-context flow list
    preset-context flow ./instructions/flow.json
    preset-context flow clear
 EOF
@@ -66,6 +68,28 @@ Notes:
    - Values may be quoted or unquoted.
    - Dotted keys create nested objects beneath .data.
 EOF
+}
+
+preset_context_list_flow() {
+    if [ ! -f "$TARGET_FILE" ]; then
+        echo "No flow is set."
+        return 0
+    fi
+
+    local flow
+    flow=$(jq '.flow // empty' "$TARGET_FILE")
+
+    if [ -z "$flow" ]; then
+        echo "No flow is set."
+        return 0
+    fi
+
+    if jq -e '.flow | length == 0' "$TARGET_FILE" >/dev/null 2>&1; then
+        echo "No flow is set."
+        return 0
+    fi
+
+    jq '.flow' "$TARGET_FILE"
 }
 
 preset_context_import_flow() {
@@ -154,12 +178,14 @@ case "${1:-}" in
     flow)
         shift
         if [ $# -ne 1 ]; then
-            echo "ERROR: flow accepts exactly one argument: <file-path> or clear." >&2
+            echo "ERROR: flow accepts exactly one argument: list, <file-path>, or clear." >&2
             echo "" >&2
             preset_context_usage >&2
             exit 1
         fi
-        if [ "$1" = "clear" ]; then
+        if [ "$1" = "list" ]; then
+            preset_context_list_flow
+        elif [ "$1" = "clear" ]; then
             preset_context_clear_flow
         else
             preset_context_import_flow "$1"
