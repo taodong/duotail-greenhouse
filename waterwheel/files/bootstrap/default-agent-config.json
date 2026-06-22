@@ -32,7 +32,7 @@
     {
       "name": "GLOBAL_CONTEXT",
       "description": "Path to a JSON file of global variables/URLs injected into the system prompt",
-      "default": "./instructions/global_context.json",
+      "default": "./instructions/global-context.json",
       "file": true
     },
     {
