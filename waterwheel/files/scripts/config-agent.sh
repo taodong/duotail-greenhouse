@@ -24,7 +24,7 @@ while [[ $# -gt 0 ]]; do
 done
 
 ALLOWED_DOMAINS_FILE="${AGENT_PATH}/instructions/allowed-domains.yaml"
-EXTRA_INSTRUCTION_FILE="${AGENT_PATH}/instructions/extra-instruction.md"
+EXTRA_INSTRUCTION_FILE="${AGENT_PATH}/instructions/extra-instructions.md"
 EXTRA_LOCAL_FILE="${CONFIG_HELPERS_PATH}/extra-local.md"
 EXTRA_GEMMA_FILE="${CONFIG_HELPERS_PATH}/extra-gemma.md"
 STATUS_FILE="${CONFIG_HELPERS_PATH}/agent-config-status.yaml"
@@ -78,7 +78,7 @@ status_add_entry() {
 }
 
 # Remove an entry from the status file. If no entries remain, delete the
-# status file and extra-instruction.md.
+# status file and extra-instructions.md.
 status_remove_entry() {
   local entry="$1"
   if [[ ! -f "$STATUS_FILE" ]]; then
@@ -694,7 +694,7 @@ disable_host_testing() {
     mv "$tmp" "$EXTRA_INSTRUCTION_FILE"
   fi
 
-  # Removes the entry and deletes both status file + extra-instruction.md if
+  # Removes the entry and deletes both status file + extra-instructions.md if
   # no entries remain.
   status_remove_entry "host-testing"
 

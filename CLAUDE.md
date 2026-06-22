@@ -95,11 +95,11 @@ Files mounted at `/agent/instructions/` control agent behavior:
 - **`global-context.json`** — Shared test variables (base URLs, credentials, etc.)
 - **`allowed-domains.yaml`** — Playwright domain allowlist; agent cannot navigate outside these origins
 - **`email-permissions.yaml`** — Controls sender/recipient allowlist for email MCP
-- **`extra-instruction.md`** — Injected into every test run (used for URL rewriting: `localhost` → `host.docker.internal`)
+- **`extra-instructions.md`** — Injected into every test run (used for URL rewriting: `localhost` → `host.docker.internal`)
 - **`system-prompt-cn.md`** / test instruction `.md` files — Agent instructions / test cases
 
 The `waterwheel/files/bootstrap/` directory contains example/default versions of all these files.
 
 ### URL Rewriting
 
-When running tests against a local development server from inside Docker, `extra-instruction.md` instructs the agent to replace `localhost` with `host.docker.internal` automatically.
+When running tests against a local development server from inside Docker, `extra-instructions.md` instructs the agent to replace `localhost` with `host.docker.internal` automatically.

@@ -193,7 +193,7 @@ When a Gemma mode is selected (provider `gemma`), you are also prompted for the 
 
 If Ollama runs on the host machine, use `http://host.docker.internal:<port>`.
 
-After confirmation, the content of `extra-gemma.md` is appended to `/agent/instructions/extra-instruction.md` inside a `<!-- gemma-start -->` / `<!-- gemma-end -->` marker block, and `gemma` is recorded in `agent-config-status.yaml` under `extra-instructions`.
+After confirmation, the content of `extra-gemma.md` is appended to `/agent/instructions/extra-instructions.md` inside a `<!-- gemma-start -->` / `<!-- gemma-end -->` marker block, and `gemma` is recorded in `agent-config-status.yaml` under `extra-instructions`.
 
 ### DeepSeek: Chinese System Prompt
 
@@ -224,7 +224,7 @@ When you apply a different mode within the same provider, the script automatical
 
 | Previous state | Action taken on switch |
 |---|---|
-| Gemma extra instruction active | Removes the `<!-- gemma-start/end -->` block from `extra-instruction.md` and removes `gemma` from `agent-config-status.yaml`. |
+| Gemma extra instruction active | Removes the `<!-- gemma-start/end -->` block from `extra-instructions.md` and removes `gemma` from `agent-config-status.yaml`. |
 | Chinese system prompt active | Restores `system.prompt.md` from `system-prompt-default.md` and removes `system-prompt: cn` from `agent-config-status.yaml`. |
 
 ### Applied Settings
@@ -297,13 +297,13 @@ Enables or disables the host testing mode, which allows the agent to reach a web
 
 ### Enabling
 
-1. Appends the content of `extra-local.md` to `/agent/instructions/extra-instruction.md` inside a `<!-- host-testing-start -->` / `<!-- host-testing-end -->` marker block. This injects a URL-rewriting rule that replaces `localhost` with `host.docker.internal` in all URLs the agent encounters.
+1. Appends the content of `extra-local.md` to `/agent/instructions/extra-instructions.md` inside a `<!-- host-testing-start -->` / `<!-- host-testing-end -->` marker block. This injects a URL-rewriting rule that replaces `localhost` with `host.docker.internal` in all URLs the agent encounters.
 2. If `allowed-domains.yaml` contains any `localhost` entries, they are rewritten to `host.docker.internal`.
 3. Records `host-testing` under `extra-instructions` in `agent-config-status.yaml`.
 
 ### Disabling
 
-1. Removes the `<!-- host-testing-start/end -->` block from `extra-instruction.md`. If no other extra-instruction blocks remain, `extra-instruction.md` is deleted.
+1. Removes the `<!-- host-testing-start/end -->` block from `extra-instructions.md`. If no other extra-instruction blocks remain, `extra-instructions.md` is deleted.
 2. Rewrites `host.docker.internal` back to `localhost` in `allowed-domains.yaml`.
 3. Removes `host-testing` from `agent-config-status.yaml`.
 
@@ -334,7 +334,7 @@ The warning is suppressed when:
 | `/agent/config/agent-config.json` | Option 1 — updates `default` values of `env-params` entries |
 | `/agent/config/system.prompt.md` | Option 1 (DeepSeek) — replaced with CN or default content |
 | `/agent/instructions/allowed-domains.yaml` | Option 2, Option 3 |
-| `/agent/instructions/extra-instruction.md` | Option 1 (Gemma), Option 3 |
+| `/agent/instructions/extra-instructions.md` | Option 1 (Gemma), Option 3 |
 | `/config-helpers/agent-config-status.yaml` | All options — tracks current configuration state |
 
 ---
@@ -355,7 +355,7 @@ system-prompt: cn
 
 | Key | Values | Meaning |
 |---|---|---|
-| `extra-instructions` | array of strings | Active extra-instruction blocks appended to `extra-instruction.md`. Currently used values: `host-testing`, `gemma`. |
+| `extra-instructions` | array of strings | Active extra-instruction blocks appended to `extra-instructions.md`. Currently used values: `host-testing`, `gemma`. |
 | `provider-mode` | mode slug or `manual` | The currently applied AI provider mode. Slug matches the `.env` filename without the extension (e.g. `anthropic-default`). |
 | `system-prompt` | `cn` | Set when the Chinese system prompt is active. Absent when the default prompt is in use. |
 
@@ -406,5 +406,5 @@ cp ./waterwheel/files/bootstrap/default-agent-config.json \
 
 | `AI_PROVIDER` value | Extra behaviour |
 |---|---|
-| `gemma` | Prompts for `AI_BASE_URL`; appends `extra-gemma.md` block to `extra-instruction.md`. |
+| `gemma` | Prompts for `AI_BASE_URL`; appends `extra-gemma.md` block to `extra-instructions.md`. |
 | `deepseek` | Prompts whether to use the Chinese system prompt. |

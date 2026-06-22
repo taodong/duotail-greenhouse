@@ -21,6 +21,10 @@ Waterwheel defines the agent for web testing.
 docker buildx create --driver docker-container --name multiplatform
 docker buildx build --platform linux/amd64,linux/arm64 --ssh default="$SSH_AUTH_SOCK" -t taojdcn/duotail-waterwheel:latest --push --builder multiplatform .
 ```
+build mac only image
+```bash
+DOCKER_BUILDKIT=1 docker build --ssh default="$SSH_AUTH_SOCK" -t taojdcn/duotail-waterwheel:latest-mac .
+```
 
 ### Refresh agent code during build (without rebuilding `system-deps`)
 `waterwheel/Dockerfile` supports `AGENT_CLONE_BUSTER` in the `agent-builder` stage. Pass a unique value when you want to force a fresh clone of the agent repository.
@@ -312,7 +316,7 @@ manage-test-files -ap /tmp/my-agent add ./temp/instructions
 
 ### Notes
 - Only `.md` files are listed and managed.
-- `add` overwrites existing files with the same destination basename silently.
+- `add` overwrites existing files with the same destination basename and prints aggregated overwrite warnings.
 - Directory import includes only direct child files, not subdirectories.
 - `delete` is best effort: invalid selectors print warnings while valid selectors are still deleted.
 

@@ -28,7 +28,7 @@ Arguments:
                                - File path: copy if it ends with .md
                                - Directory path: copy only direct child .md files
                                - Non-markdown files are ignored
-                               - Existing destination files are overwritten silently
+                               - Existing destination basenames are overwritten (warned)
 
    <selectors>                 Comma-delimited selectors
                                - Numeric selector: 1-based index from 'list'
@@ -73,7 +73,7 @@ list_test_files() {
     local file
     for file in "${TASK_MARKDOWN_FILES[@]}"; do
         printf '%d. %s\n' "$i" "$file"
-        ((i++))
+        i=$((i + 1))
     done
 }
 
@@ -81,7 +81,18 @@ copy_markdown_file() {
     local src="$1"
     local dst_basename
     dst_basename="$(basename "$src")"
-    cp -f "$src" "$TASKS_DIR/$dst_basename"
+
+    local dst_path="$TASKS_DIR/$dst_basename"
+    local overwritten=false
+    if [ -f "$dst_path" ]; then
+        overwritten=true
+    fi
+
+    cp -f "$src" "$dst_path"
+
+    if [ "$overwritten" = true ]; then
+        printf '%s' "$dst_basename"
+    fi
 }
 
 add_test_files() {
@@ -100,6 +111,10 @@ add_test_files() {
     local copied=0
     local ignored_non_md=0
     local missing=0
+    local overwrite_warnings=0
+
+    local -a overwrite_basenames=()
+    local -a overwrite_counts=()
 
     local raw_path
     for raw_path in "${raw_paths[@]}"; do
@@ -109,10 +124,29 @@ add_test_files() {
 
         if [ -f "$path" ]; then
             if [[ "$path" == *.md ]]; then
-                copy_markdown_file "$path"
-                ((copied++))
+                local overwritten_basename=""
+                overwritten_basename="$(copy_markdown_file "$path")"
+
+                copied=$((copied + 1))
+
+                if [ -n "$overwritten_basename" ]; then
+                    local found=false
+                    local idx
+                    for idx in "${!overwrite_basenames[@]}"; do
+                        if [ "${overwrite_basenames[$idx]}" = "$overwritten_basename" ]; then
+                            overwrite_counts[$idx]=$((overwrite_counts[$idx] + 1))
+                            found=true
+                            break
+                        fi
+                    done
+                    if [ "$found" = false ]; then
+                        overwrite_basenames+=("$overwritten_basename")
+                        overwrite_counts+=(1)
+                    fi
+                    overwrite_warnings=$((overwrite_warnings + 1))
+                fi
             else
-                ((ignored_non_md++))
+                ignored_non_md=$((ignored_non_md + 1))
             fi
             continue
         fi
@@ -121,18 +155,49 @@ add_test_files() {
             local child
             while IFS= read -r -d '' child; do
                 if [[ "$child" == *.md ]]; then
-                    copy_markdown_file "$child"
-                    ((copied++))
+                    local overwritten_basename=""
+                    overwritten_basename="$(copy_markdown_file "$child")"
+
+                    copied=$((copied + 1))
+
+                    if [ -n "$overwritten_basename" ]; then
+                        local found=false
+                        local idx
+                        for idx in "${!overwrite_basenames[@]}"; do
+                            if [ "${overwrite_basenames[$idx]}" = "$overwritten_basename" ]; then
+                                overwrite_counts[$idx]=$((overwrite_counts[$idx] + 1))
+                                found=true
+                                break
+                            fi
+                        done
+                        if [ "$found" = false ]; then
+                            overwrite_basenames+=("$overwritten_basename")
+                            overwrite_counts+=(1)
+                        fi
+                        overwrite_warnings=$((overwrite_warnings + 1))
+                    fi
                 else
-                    ((ignored_non_md++))
+                    ignored_non_md=$((ignored_non_md + 1))
                 fi
             done < <(find "$path" -maxdepth 1 -mindepth 1 -type f -print0)
             continue
         fi
 
         echo "WARNING: path not found, skipped: $path" >&2
-        ((missing++))
+        missing=$((missing + 1))
     done
+
+    if [ ${#overwrite_basenames[@]} -gt 0 ]; then
+        while IFS=$'\t' read -r basename count; do
+            [ -z "$basename" ] && continue
+            echo "WARNING: destination basename overwritten: $basename ($count time(s))" >&2
+        done < <(
+            local idx
+            for idx in "${!overwrite_basenames[@]}"; do
+                printf '%s\t%s\n' "${overwrite_basenames[$idx]}" "${overwrite_counts[$idx]}"
+            done | LC_ALL=C sort -t $'\t' -k1,1
+        )
+    fi
 
     echo "Added/updated $copied markdown file(s) into $TASKS_DIR."
     if [ "$ignored_non_md" -gt 0 ]; then
@@ -140,6 +205,11 @@ add_test_files() {
     fi
     if [ "$missing" -gt 0 ]; then
         echo "Skipped $missing missing path(s)."
+    fi
+
+    local total_warnings=$((ignored_non_md + missing + overwrite_warnings))
+    if [ "$total_warnings" -gt 0 ]; then
+        echo "Completed with $total_warnings warning(s)."
     fi
 
     return 0
@@ -155,7 +225,7 @@ clear_test_files() {
     local file
     while IFS= read -r -d '' file; do
         rm -f "$file"
-        ((deleted++))
+        deleted=$((deleted + 1))
     done < <(find "$TASKS_DIR" -maxdepth 1 -mindepth 1 -type f -name "*.md" -print0)
 
     echo "Cleared $deleted markdown test file(s) from $TASKS_DIR."
@@ -193,7 +263,7 @@ delete_test_files() {
             local idx="$selector"
             if (( idx < 1 || idx > ${#TASK_MARKDOWN_FILES[@]} )); then
                 echo "WARNING: index out of range, skipped: $selector" >&2
-                ((warnings++))
+                warnings=$((warnings + 1))
                 continue
             fi
             target="${TASK_MARKDOWN_FILES[$((idx-1))]}"
@@ -209,7 +279,7 @@ delete_test_files() {
             done
             if [ "$matched" = false ]; then
                 echo "WARNING: filename not found, skipped: $selector" >&2
-                ((warnings++))
+                warnings=$((warnings + 1))
                 continue
             fi
         fi
@@ -235,10 +305,10 @@ delete_test_files() {
         local full_path="$TASKS_DIR/$target"
         if [ -f "$full_path" ]; then
             rm -f "$full_path"
-            ((deleted++))
+            deleted=$((deleted + 1))
         else
             echo "WARNING: file no longer exists, skipped: $target" >&2
-            ((warnings++))
+            warnings=$((warnings + 1))
         fi
     done
 
