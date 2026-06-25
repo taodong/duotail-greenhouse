@@ -631,6 +631,40 @@ set-domain-permission -ap /tmp/my-agent -l "http://localhost:8025"
 
 ---
 
+## upload-instruction-file Usage
+
+`upload-instruction-file` creates or replaces a file under `$AGENT_PATH/instructions` using content read from stdin. The `<filename>` argument is appended to `$AGENT_PATH/instructions` to form the full target path (it is passed to `file-upload-lib`). This is a convenient way to push instruction/config files (e.g. `allowed-domains.yaml`, `email-permissions.yaml`, `extra-instructions.md`) into the agent without editing files in place.
+
+```bash
+upload-instruction-file [-ap <agent-path>] <filename>
+```
+
+### Options
+| Option | Description |
+| --- | --- |
+| `-ap <path>` | Override the agent path (default: `/agent`) |
+| `-h`, `--help`, `h`, `help` | Show usage help |
+
+### Behavior
+- Content is read from stdin and written to `$AGENT_PATH/instructions/<filename>`.
+- Missing parent directories are created automatically (e.g. a nested `<filename>`).
+- An existing file is replaced, and a `WARNING` is printed to stderr when it is.
+
+### Examples
+```bash
+# Create or replace allowed-domains.yaml from stdin
+printf 'allowed:\n  - http://host.docker.internal:8080\n' | \
+  upload-instruction-file allowed-domains.yaml
+
+# Pipe a local file into the instructions folder
+cat ./extra-instructions.md | upload-instruction-file extra-instructions.md
+
+# Use a custom agent path
+cat ./email-permissions.yaml | upload-instruction-file -ap /tmp/my-agent email-permissions.yaml
+```
+
+---
+
 ## Configuration
 
 ### Permissions
