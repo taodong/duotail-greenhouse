@@ -225,6 +225,7 @@ COPY files/scripts/stop-qa.sh /usr/local/bin/stop-qa
 COPY files/scripts/playwright-mcp.sh /usr/local/bin/playwright-mcp
 COPY files/scripts/email-mcp.sh /usr/local/bin/email-mcp
 COPY files/scripts/config-agent.sh /usr/local/bin/config-agent
+COPY files/scripts/config-ai-provider.sh /usr/local/bin/config-ai-provider
 COPY files/scripts/update-agent-config.sh /usr/local/bin/update-agent-config
 COPY files/scripts/run-qa-lib.sh /usr/local/bin/run-qa-lib
 COPY files/scripts/check-test-result.sh /usr/local/bin/check-test-result
@@ -242,6 +243,7 @@ RUN chown root:root /usr/local/bin/playwright-mcp \
                    /usr/local/bin/run-qa \
                    /usr/local/bin/stop-qa \
                    /usr/local/bin/config-agent \
+                   /usr/local/bin/config-ai-provider \
                    /usr/local/bin/update-agent-config \
                    /usr/local/bin/run-qa-lib \
                    /usr/local/bin/check-test-result \
@@ -258,6 +260,7 @@ RUN chown root:root /usr/local/bin/playwright-mcp \
               /usr/local/bin/run-qa \
               /usr/local/bin/stop-qa \
               /usr/local/bin/config-agent \
+              /usr/local/bin/config-ai-provider \
               /usr/local/bin/update-agent-config \
               /usr/local/bin/run-qa-lib \
               /usr/local/bin/check-test-result \

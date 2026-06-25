@@ -448,6 +448,49 @@ The imported file may contain extra top-level metadata; only the `flow` array is
 
 ---
 
+## config-ai-provider Usage
+
+`config-ai-provider` applies an AI provider mode and model without interactive prompts.
+
+```bash
+config-ai-provider --provider <provider> --model <model> --mode <default|efficiency> [-ap <agent-path>] [-cp <config-helpers-path>]
+```
+
+### Options
+| Option | Description |
+| --- | --- |
+| `--provider <value>` | Provider value written directly to `AI_PROVIDER` (for example: `openai`) |
+| `--model <value>` | Model value written directly to `AI_MODEL` |
+| `--mode <value>` | Mode selector: `default` -> `<provider>-default.env`, `efficiency` -> `<provider>-token-efficiency.env` |
+| `-ap <path>` | Override the agent path (default: `/agent`) |
+| `-cp <path>` | Override the config helpers path (default: `/config-helpers`) |
+| `-h`, `--help`, `h`, `help` | Show usage help |
+
+### Behavior
+
+- Uses the same mode-file update flow as `config-agent` option `1`.
+- Respects provider locking: once a provider is configured, switching to a different provider requires a new container.
+- Does **not** prompt for Gemma `AI_BASE_URL`.
+- Does **not** enable the DeepSeek Chinese system prompt.
+- Does **not** append Gemma extra instructions.
+
+### Examples
+
+```bash
+# Apply OpenAI default mode with an explicit model
+config-ai-provider --provider openai --model gpt-5.4 --mode default
+
+# Apply Anthropic efficiency mode against a local/dev agent path
+config-ai-provider \
+  --provider anthropic \
+  --model claude-sonnet-4-5 \
+  --mode efficiency \
+  -ap /tmp/my-agent \
+  -cp /tmp/config-helpers
+```
+
+---
+
 ## display-ai-config Usage
 
 `display-ai-config` prints effective AI runtime settings as JSON.
@@ -630,6 +673,7 @@ Use `preset-context` to read and update this file. See [preset-context Usage](#p
 | `/usr/local/bin/playwright-mcp`             | `root:root` | `700` | Cannot execute | Playwright MCP launch script                              |
 | `/usr/local/bin/email-mcp`                  | `root:root` | `700` | Cannot execute | Email MCP launch script                                   |
 | `/usr/local/bin/config-agent`               | `root:root` | `700` | Cannot execute | Script to quickly config the agent                        |
+| `/usr/local/bin/config-ai-provider`         | `root:root` | `700` | Cannot execute | Non-interactively applies provider/model/mode settings    |
 | `/usr/local/bin/run-qa-lib`                 | `root:root` | `700` | Cannot execute | Shared library sourced by `run-qa`, `stop-qa`, `check-test-result` |
 | `/usr/local/bin/file-upload-lib`            | `root:root` | `700` | Cannot execute | Saves stdin content to a target file path |
 | `/usr/local/bin/manage-global-constants`    | `root:root` | `700` | Cannot execute | Manages entries in `global-context.json`                  |
@@ -648,6 +692,7 @@ Use `preset-context` to read and update this file. See [preset-context Usage](#p
 | `check-test-result`        | ✅ | ❌ | `/usr/local/bin/check-test-result` (mode `700`)          |
 | `get-failure-detail`       | ✅ | ❌ | `/usr/local/bin/get-failure-detail` (mode `700`)         |
 | `config-agent`             | ✅ | ❌ | `/usr/local/bin/config-agent` (mode `700`)               |
+| `config-ai-provider`       | ✅ | ❌ | `/usr/local/bin/config-ai-provider` (mode `700`)         |
 | `file-upload-lib`          | ✅ | ❌ | `/usr/local/bin/file-upload-lib` (mode `700`)            |
 | `manage-global-constants`  | ✅ | ❌ | `/usr/local/bin/manage-global-constants` (mode `700`)    |
 | `manage-test-files`        | ✅ | ❌ | `/usr/local/bin/manage-test-files` (mode `700`)          |
