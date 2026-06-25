@@ -240,6 +240,7 @@ COPY files/scripts/reset-test-config.sh /usr/local/bin/reset-test-config
 COPY files/scripts/set-domain-permission.sh /usr/local/bin/set-domain-permission
 COPY files/scripts/upload-instruction-file.sh /usr/local/bin/upload-instruction-file
 COPY files/scripts/upload-test-task.sh /usr/local/bin/upload-test-task
+COPY files/scripts/enable-test-on-host.sh /usr/local/bin/enable-test-on-host
 
 RUN chown root:root /usr/local/bin/playwright-mcp \
                    /usr/local/bin/email-mcp \
@@ -260,7 +261,8 @@ RUN chown root:root /usr/local/bin/playwright-mcp \
                    /usr/local/bin/reset-test-config \
                    /usr/local/bin/set-domain-permission \
                    /usr/local/bin/upload-instruction-file \
-                   /usr/local/bin/upload-test-task && \
+                   /usr/local/bin/upload-test-task \
+                   /usr/local/bin/enable-test-on-host && \
     chmod 700 /usr/local/bin/playwright-mcp \
               /usr/local/bin/email-mcp \
               /usr/local/bin/run-qa \
@@ -280,7 +282,8 @@ RUN chown root:root /usr/local/bin/playwright-mcp \
               /usr/local/bin/reset-test-config \
               /usr/local/bin/set-domain-permission \
               /usr/local/bin/upload-instruction-file \
-              /usr/local/bin/upload-test-task
+              /usr/local/bin/upload-test-task \
+              /usr/local/bin/enable-test-on-host
 
 # -----------------------------------------------------------------------------
 # 7. SUPERVISOR CONFIGURATION

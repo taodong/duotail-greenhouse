@@ -699,6 +699,43 @@ cat ./signup.md | upload-test-task -ap /tmp/my-agent signup.md
 
 ---
 
+## enable-test-on-host Usage
+
+`enable-test-on-host` non-interactively enables host testing, mirroring the **Enable host testing** action in `config-agent` (`enable_host_testing`):
+
+- Appends the host-testing block from `extra-local.md` (under config-helpers) to `$AGENT_PATH/instructions/extra-instructions.md`.
+- Records the `host-testing` entry in the agent config status file.
+- Rewrites `localhost` → `host.docker.internal` in `$AGENT_PATH/instructions/allowed-domains.yaml`.
+
+In addition, if `$AGENT_PATH/instructions/global-context.json` exists, every `localhost` value in it is rewritten to `host.docker.internal`.
+
+```bash
+enable-test-on-host [-ap <agent-path>] [-cp <config-helpers-path>]
+```
+
+### Options
+| Option | Description |
+| --- | --- |
+| `-ap <path>` | Override the agent path (default: `/agent`) |
+| `-cp <path>` | Override the config-helpers path (default: `/config-helpers`) |
+| `-h`, `--help`, `h`, `help` | Show usage help |
+
+### Behavior
+- Re-running is idempotent: the host-testing block and status entry are not duplicated if host testing is already enabled.
+- Fails if `extra-local.md` is not found under the config-helpers path.
+- `allowed-domains.yaml` and `global-context.json` are only rewritten if they exist and contain `localhost`.
+
+### Examples
+```bash
+# Enable host testing with default paths
+enable-test-on-host
+
+# Use custom agent and config-helpers paths
+enable-test-on-host -ap /tmp/my-agent -cp /tmp/config-helpers
+```
+
+---
+
 ## Configuration
 
 ### Permissions
