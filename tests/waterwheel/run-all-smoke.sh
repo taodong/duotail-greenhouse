@@ -25,5 +25,8 @@ bash "$tests_dir/upload-test-task-smoke.sh"
 echo '== run enable-test-on-host smoke =='
 bash "$tests_dir/enable-test-on-host-smoke.sh"
 
+echo '== run reset-test-config smoke =='
+bash "$tests_dir/reset-test-config-smoke.sh"
+
 echo 'all smoke checks passed'
 

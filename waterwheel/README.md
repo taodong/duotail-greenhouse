@@ -550,13 +550,14 @@ display-ai-config --help
 `reset-test-config` deletes test task files and/or instruction files to return the agent to a clean state.
 
 ```bash
-reset-test-config [-ap <agent-path>] [-t] [-i]
+reset-test-config [-ap <agent-path>] [-cp <config-helpers-path>] [-t] [-i]
 ```
 
 ### Options
 | Option | Description |
 | --- | --- |
 | `-ap <path>` | Override the agent path (default: `/agent`) |
+| `-cp <path>` | Override the config-helpers path (default: `/config-helpers`) |
 | `-t` | Delete all `.md` files under `$AGENT_PATH/tasks` |
 | `-i` | Delete all files under `$AGENT_PATH/instructions` except `email-permissions.yaml` |
 | `-h`, `--help`, `h`, `help` | Show usage help |
@@ -564,6 +565,7 @@ reset-test-config [-ap <agent-path>] [-t] [-i]
 ### Behavior
 - When neither `-t` nor `-i` is provided, **both** operations are performed.
 - `email-permissions.yaml` is always preserved when resetting instructions.
+- Resetting instructions also clears the `extra-instructions` entries (such as `host-testing`) from the agent config status file, since the `extra-instructions.md` file that backs them is deleted. Other status keys (`provider-mode`, `system-prompt`) are preserved, and the status file is removed entirely if nothing else remains. This keeps host-testing state consistent — without it, `config-agent` would still report host testing as enabled after a reset.
 - Missing directories are reported but do not cause an error.
 
 ### Examples
