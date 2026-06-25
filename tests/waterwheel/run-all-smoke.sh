@@ -13,5 +13,11 @@ bash "$tests_dir/preset-context-smoke.sh"
 echo '== run file-upload-lib smoke =='
 bash "$tests_dir/file-upload-lib-smoke.sh"
 
+echo '== run set-domain-permission smoke =='
+bash "$tests_dir/set-domain-permission-smoke.sh"
+
+echo '== run upload-instruction-file smoke =='
+bash "$tests_dir/upload-instruction-file-smoke.sh"
+
 echo 'all smoke checks passed'
 
