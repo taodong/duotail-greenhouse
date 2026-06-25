@@ -19,5 +19,8 @@ bash "$tests_dir/set-domain-permission-smoke.sh"
 echo '== run upload-instruction-file smoke =='
 bash "$tests_dir/upload-instruction-file-smoke.sh"
 
+echo '== run upload-test-task smoke =='
+bash "$tests_dir/upload-test-task-smoke.sh"
+
 echo 'all smoke checks passed'
 

@@ -665,6 +665,40 @@ cat ./email-permissions.yaml | upload-instruction-file -ap /tmp/my-agent email-p
 
 ---
 
+## upload-test-task Usage
+
+`upload-test-task` creates or replaces a Markdown test task under `$AGENT_PATH/tasks` using content read from stdin. The `<filename.md>` argument is appended to `$AGENT_PATH/tasks` to form the full target path (it is passed to `file-upload-lib`). Only Markdown files are accepted — the filename must end with `.md`.
+
+```bash
+upload-test-task [-ap <agent-path>] <filename.md>
+```
+
+### Options
+| Option | Description |
+| --- | --- |
+| `-ap <path>` | Override the agent path (default: `/agent`) |
+| `-h`, `--help`, `h`, `help` | Show usage help |
+
+### Behavior
+- Content is read from stdin and written to `$AGENT_PATH/tasks/<filename.md>`.
+- The filename must end with `.md`, otherwise the command fails.
+- Missing parent directories are created automatically (e.g. a nested `<filename.md>`).
+- An existing file is replaced, and a `WARNING` is printed to stderr when it is.
+
+### Examples
+```bash
+# Create or replace a test task from stdin
+printf '# Login test\n' | upload-test-task login.md
+
+# Pipe a local file into the tasks folder
+cat ./checkout.md | upload-test-task checkout.md
+
+# Use a custom agent path
+cat ./signup.md | upload-test-task -ap /tmp/my-agent signup.md
+```
+
+---
+
 ## Configuration
 
 ### Permissions
