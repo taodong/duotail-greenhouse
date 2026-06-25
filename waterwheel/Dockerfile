@@ -234,6 +234,8 @@ COPY files/scripts/manage-global-constants.sh /usr/local/bin/manage-global-const
 COPY files/scripts/preset-context.sh /usr/local/bin/preset-context
 COPY files/scripts/manage-test-files.sh /usr/local/bin/manage-test-files
 COPY files/scripts/file-upload-lib.sh /usr/local/bin/file-upload-lib
+COPY files/scripts/display-ai-config.sh /usr/local/bin/display-ai-config
+COPY files/scripts/reset-test-config.sh /usr/local/bin/reset-test-config
 
 RUN chown root:root /usr/local/bin/playwright-mcp \
                    /usr/local/bin/email-mcp \
@@ -248,7 +250,9 @@ RUN chown root:root /usr/local/bin/playwright-mcp \
                    /usr/local/bin/manage-global-constants \
                    /usr/local/bin/preset-context \
                    /usr/local/bin/manage-test-files \
-                   /usr/local/bin/file-upload-lib && \
+                   /usr/local/bin/file-upload-lib \
+                   /usr/local/bin/display-ai-config \
+                   /usr/local/bin/reset-test-config && \
     chmod 700 /usr/local/bin/playwright-mcp \
               /usr/local/bin/email-mcp \
               /usr/local/bin/run-qa \
@@ -262,7 +266,9 @@ RUN chown root:root /usr/local/bin/playwright-mcp \
               /usr/local/bin/manage-global-constants \
               /usr/local/bin/preset-context \
               /usr/local/bin/manage-test-files \
-              /usr/local/bin/file-upload-lib
+              /usr/local/bin/file-upload-lib \
+              /usr/local/bin/display-ai-config \
+              /usr/local/bin/reset-test-config
 
 # -----------------------------------------------------------------------------
 # 7. SUPERVISOR CONFIGURATION

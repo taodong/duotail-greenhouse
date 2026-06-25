@@ -448,6 +448,101 @@ The imported file may contain extra top-level metadata; only the `flow` array is
 
 ---
 
+## display-ai-config Usage
+
+`display-ai-config` prints effective AI runtime settings as JSON.
+
+```bash
+display-ai-config [-ap <agent-path>]
+```
+
+### Options
+| Option | Description |
+| --- | --- |
+| `-ap <path>` | Override the agent path (default: `/agent`) |
+| `-h`, `--help`, `h`, `help` | Show usage help |
+
+### Output
+
+Returns a JSON object with exactly these keys:
+
+- `aiProvider`
+- `aiModel`
+- `tokenMode`
+
+Lookup order per key:
+
+1. Environment variable
+2. `default` in `$AGENT_PATH/config/agent-config.json` under `env-params[]`
+
+Key mapping:
+
+- `aiProvider` -> `AI_PROVIDER`
+- `aiModel` -> `AI_MODEL`
+- `tokenMode` -> `CONTEXT_COMPRESSION`
+
+`tokenMode` mapping behavior:
+
+- `CONTEXT_COMPRESSION=false` (case-insensitive) -> `default`
+- Any other non-empty value -> `efficiency`
+- No value from env or config -> empty string
+
+### Examples
+
+```bash
+# Show effective AI settings from /agent
+display-ai-config
+
+# Override path for local/dev testing
+display-ai-config -ap /tmp/my-agent
+
+# Show help
+display-ai-config --help
+```
+
+---
+
+## reset-test-config Usage
+
+`reset-test-config` deletes test task files and/or instruction files to return the agent to a clean state.
+
+```bash
+reset-test-config [-ap <agent-path>] [-t] [-i]
+```
+
+### Options
+| Option | Description |
+| --- | --- |
+| `-ap <path>` | Override the agent path (default: `/agent`) |
+| `-t` | Delete all `.md` files under `$AGENT_PATH/tasks` |
+| `-i` | Delete all files under `$AGENT_PATH/instructions` except `email-permissions.yaml` |
+| `-h`, `--help`, `h`, `help` | Show usage help |
+
+### Behavior
+- When neither `-t` nor `-i` is provided, **both** operations are performed.
+- `email-permissions.yaml` is always preserved when resetting instructions.
+- Missing directories are reported but do not cause an error.
+
+### Examples
+```bash
+# Reset both tasks and instructions
+reset-test-config
+
+# Reset task files only
+reset-test-config -t
+
+# Reset instruction files only
+reset-test-config -i
+
+# Reset both explicitly
+reset-test-config -t -i
+
+# Use a custom agent path
+reset-test-config -ap /tmp/my-agent -t
+```
+
+---
+
 ## Configuration
 
 ### Permissions
@@ -540,6 +635,8 @@ Use `preset-context` to read and update this file. See [preset-context Usage](#p
 | `/usr/local/bin/manage-global-constants`    | `root:root` | `700` | Cannot execute | Manages entries in `global-context.json`                  |
 | `/usr/local/bin/manage-test-files`          | `root:root` | `700` | Cannot execute | Manages markdown test files in `/agent/tasks`             |
 | `/usr/local/bin/preset-context`             | `root:root` | `700` | Cannot execute | Manages entries in `preset-context.json`                  |
+| `/usr/local/bin/display-ai-config`          | `root:root` | `700` | Cannot execute | Prints effective AI provider/model/token mode as JSON     |
+| `/usr/local/bin/reset-test-config`          | `root:root` | `700` | Cannot execute | Deletes task `.md` files and/or instruction files         |
 | `/etc/profile.d/container_env.sh`           | `root:root` | `644` | Read-only | Environment variables forwarded from root to `agentuser`  |
 
 ### Command Availability Matrix
@@ -555,6 +652,8 @@ Use `preset-context` to read and update this file. See [preset-context Usage](#p
 | `manage-global-constants`  | ✅ | ❌ | `/usr/local/bin/manage-global-constants` (mode `700`)    |
 | `manage-test-files`        | ✅ | ❌ | `/usr/local/bin/manage-test-files` (mode `700`)          |
 | `preset-context`            | ✅ | ❌ | `/usr/local/bin/preset-context` (mode `700`)              |
+| `display-ai-config`        | ✅ | ❌ | `/usr/local/bin/display-ai-config` (mode `700`)          |
+| `reset-test-config`        | ✅ | ❌ | `/usr/local/bin/reset-test-config` (mode `700`)          |
 | `playwright-mcp`           | ✅ | ❌ | Started by Supervisor (`supervisord.conf`)               |
 | `email-mcp`                | ✅ | ❌ | Started by Supervisor (`supervisord.conf`)               |
 | `supervisorctl start/stop` | ✅ | ❌ | Used inside `run-qa.sh`                                  |
