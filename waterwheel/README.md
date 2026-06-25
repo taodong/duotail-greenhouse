@@ -126,6 +126,38 @@ It consolidates logic that was previously duplicated across `run-qa` and `stop-q
 
 ---
 
+## file-upload-lib Usage
+
+`file-upload-lib` reads stdin and saves it to an absolute target file path.
+
+```bash
+file-upload-lib <absolute-path>
+```
+
+### Options
+| Option | Description |
+| --- | --- |
+| `-h`, `--help`, `h`, `help` | Show usage help |
+
+### Behavior
+- Creates missing parent directories automatically.
+- Replaces existing files and prints a warning.
+- Returns an error if path is missing/invalid or any I/O step fails.
+
+### Examples
+```bash
+# Write a short string
+printf 'hello\n' | file-upload-lib /tmp/demo.txt
+
+# Write JSON from a file to a nested path
+cat ./payload.json | file-upload-lib /tmp/data/payload.json
+
+# Show help
+file-upload-lib --help
+```
+
+---
+
 ## check-test-result Usage
 
 `check-test-result` prints the `exit_condition` from `$AGENT_PATH/outputs/test-results.json`, or reports the current run status if a test is still in progress.
@@ -504,6 +536,7 @@ Use `preset-context` to read and update this file. See [preset-context Usage](#p
 | `/usr/local/bin/email-mcp`                  | `root:root` | `700` | Cannot execute | Email MCP launch script                                   |
 | `/usr/local/bin/config-agent`               | `root:root` | `700` | Cannot execute | Script to quickly config the agent                        |
 | `/usr/local/bin/run-qa-lib`                 | `root:root` | `700` | Cannot execute | Shared library sourced by `run-qa`, `stop-qa`, `check-test-result` |
+| `/usr/local/bin/file-upload-lib`            | `root:root` | `700` | Cannot execute | Saves stdin content to a target file path |
 | `/usr/local/bin/manage-global-constants`    | `root:root` | `700` | Cannot execute | Manages entries in `global-context.json`                  |
 | `/usr/local/bin/manage-test-files`          | `root:root` | `700` | Cannot execute | Manages markdown test files in `/agent/tasks`             |
 | `/usr/local/bin/preset-context`             | `root:root` | `700` | Cannot execute | Manages entries in `preset-context.json`                  |
@@ -518,6 +551,7 @@ Use `preset-context` to read and update this file. See [preset-context Usage](#p
 | `check-test-result`        | ✅ | ❌ | `/usr/local/bin/check-test-result` (mode `700`)          |
 | `get-failure-detail`       | ✅ | ❌ | `/usr/local/bin/get-failure-detail` (mode `700`)         |
 | `config-agent`             | ✅ | ❌ | `/usr/local/bin/config-agent` (mode `700`)               |
+| `file-upload-lib`          | ✅ | ❌ | `/usr/local/bin/file-upload-lib` (mode `700`)            |
 | `manage-global-constants`  | ✅ | ❌ | `/usr/local/bin/manage-global-constants` (mode `700`)    |
 | `manage-test-files`        | ✅ | ❌ | `/usr/local/bin/manage-test-files` (mode `700`)          |
 | `preset-context`            | ✅ | ❌ | `/usr/local/bin/preset-context` (mode `700`)              |
