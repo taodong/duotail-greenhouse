@@ -586,6 +586,51 @@ reset-test-config -ap /tmp/my-agent -t
 
 ---
 
+## set-domain-permission Usage
+
+`set-domain-permission` generates the Playwright MCP domain allowlist at `$AGENT_PATH/instructions/allowed-domains.yaml` from a comma-delimited list of domains. Each domain becomes one entry under the `allowed` array.
+
+```bash
+set-domain-permission [-ap <agent-path>] [-l] <domain1,domain2,...>
+```
+
+### Options
+| Option | Description |
+| --- | --- |
+| `-ap <path>` | Override the agent path (default: `/agent`) |
+| `-l` | Rewrite every `localhost` in the domains to `host.docker.internal` (useful when targeting a local dev server from inside Docker) |
+| `-h`, `--help`, `h`, `help` | Show usage help |
+
+### Behavior
+- Domains are separated by commas. Quote any entry containing shell-special characters, e.g. `"https://*.wikipedia.org"`.
+- Leading and trailing whitespace around each entry is trimmed.
+- Empty entries are ignored.
+- The target `allowed-domains.yaml` is overwritten each run.
+
+### Examples
+```bash
+# Generate allowed-domains.yaml from a list of domains
+set-domain-permission https://www.google.com,"https://*.wikipedia.org","http://localhost:8080"
+# Produces:
+# allowed:
+#   - https://www.google.com
+#   - https://*.wikipedia.org
+#   - http://localhost:8080
+
+# Rewrite localhost to host.docker.internal with -l
+set-domain-permission -l https://www.google.com,"https://*.wikipedia.org","http://localhost:8080"
+# Produces:
+# allowed:
+#   - https://www.google.com
+#   - https://*.wikipedia.org
+#   - http://host.docker.internal:8080
+
+# Use a custom agent path
+set-domain-permission -ap /tmp/my-agent -l "http://localhost:8025"
+```
+
+---
+
 ## Configuration
 
 ### Permissions
@@ -597,6 +642,8 @@ allowed:
   - http://host.docker.internal:8080
   - http://host.docker.internal:8025
 ```
+
+Use `set-domain-permission` to generate this file from a comma-delimited domain list instead of editing YAML directly. See [set-domain-permission Usage](#set-domain-permission-usage).
 
 Email MCP permissions should be configured under `/agent/instructions/email-permissions.yaml`.
 
