@@ -738,6 +738,50 @@ enable-test-on-host -ap /tmp/my-agent -cp /tmp/config-helpers
 
 ---
 
+## output-context-variables Usage
+
+`output-context-variables` prints the user-scoped context values produced by the latest run as a flat JSON object, read from `$AGENT_PATH/outputs/test-context.json`. Tests store values such as AI-generated usernames and passwords there; this command extracts the entries whose `scope` is `user` for reuse outside the container.
+
+```bash
+output-context-variables [-ap <agent-path>]
+```
+
+### Options
+| Option | Description |
+| --- | --- |
+| `-ap <path>` | Override the agent path (default: `/agent`, or the `AGENT_PATH` environment variable) |
+| `-h`, `--help`, `h`, `help` | Show usage help |
+
+### Behavior
+- Reports an error and exits non-zero if a `run-qa` run is currently active (exporting context variables while testing is in progress is not supported).
+- Reports an error and exits non-zero if `$AGENT_PATH/outputs/test-context.json` does not exist.
+- For each element whose `scope` is `user`, the `user.` prefix is stripped from its `key` to form the output key, and its `value` is used as the output value (objects, arrays, and scalars are preserved).
+- Elements missing a `key` or `value` property are skipped.
+- Prints an empty object `{}` when no user-scoped element is found.
+
+### Examples
+```bash
+# Output user-scoped context values from the latest run
+output-context-variables
+
+# Use a custom agent path
+output-context-variables -ap /tmp/my-agent
+```
+
+Given a `test-context.json` containing `user.testuser` and `user.channel` entries, the command prints:
+
+```json
+{
+  "testuser": {
+    "username": "test.user21",
+    "email": "test.user21@enduser1.com"
+  },
+  "channel": "news"
+}
+```
+
+---
+
 ## Configuration
 
 ### Permissions
@@ -824,6 +868,7 @@ Use `preset-context` to read and update this file. See [preset-context Usage](#p
 | `/usr/local/bin/stop-qa`                    | `root:root` | `700` | Cannot execute | Stops the tracked `run-qa` process tree                   |
 | `/usr/local/bin/check-test-result`          | `root:root` | `700` | Cannot execute | Prints test results or in-progress status                 |
 | `/usr/local/bin/get-failure-detail`         | `root:root` | `700` | Cannot execute | Prints full diagnostic report for the first failed test   |
+| `/usr/local/bin/output-context-variables`   | `root:root` | `700` | Cannot execute | Prints user-scoped context values from the latest run     |
 | `/usr/local/bin/playwright-mcp`             | `root:root` | `700` | Cannot execute | Playwright MCP launch script                              |
 | `/usr/local/bin/email-mcp`                  | `root:root` | `700` | Cannot execute | Email MCP launch script                                   |
 | `/usr/local/bin/config-agent`               | `root:root` | `700` | Cannot execute | Script to quickly config the agent                        |
@@ -845,6 +890,7 @@ Use `preset-context` to read and update this file. See [preset-context Usage](#p
 | `stop-qa`                  | ✅ | ❌ | `/usr/local/bin/stop-qa` (mode `700`)                    |
 | `check-test-result`        | ✅ | ❌ | `/usr/local/bin/check-test-result` (mode `700`)          |
 | `get-failure-detail`       | ✅ | ❌ | `/usr/local/bin/get-failure-detail` (mode `700`)         |
+| `output-context-variables` | ✅ | ❌ | `/usr/local/bin/output-context-variables` (mode `700`)   |
 | `config-agent`             | ✅ | ❌ | `/usr/local/bin/config-agent` (mode `700`)               |
 | `config-ai-provider`       | ✅ | ❌ | `/usr/local/bin/config-ai-provider` (mode `700`)         |
 | `file-upload-lib`          | ✅ | ❌ | `/usr/local/bin/file-upload-lib` (mode `700`)            |
