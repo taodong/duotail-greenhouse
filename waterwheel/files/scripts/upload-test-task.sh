@@ -74,10 +74,15 @@ fi
 
 TARGET_FILE="${AGENT_PATH}/tasks/${FILENAME}"
 
-# Resolve file-upload-lib: prefer same directory (local dev), fall back to PATH (container).
-_SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-_LIB="${_SCRIPT_DIR}/file-upload-lib"
-# shellcheck disable=SC1090
-source "${_LIB}.sh" 2>/dev/null || source "${_LIB}"
+# Source shared libs co-located with this script (repo scripts/ in dev,
+# /usr/local/bin in the container). The .sh suffix only exists in dev.
+_LIB="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+for _name in file-upload-lib agent-file-perms-lib; do
+  _path="${_LIB}/${_name}"
+  [ -f "${_path}.sh" ] && _path="${_path}.sh"
+  # shellcheck disable=SC1090
+  source "${_path}"
+done
 
 cmd_upload "$TARGET_FILE"
+enforce_managed_file_perms "$TARGET_FILE"

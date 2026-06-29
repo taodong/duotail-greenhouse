@@ -9,6 +9,16 @@ PROVIDER=""
 MODEL=""
 MODE=""
 
+# Source shared libs co-located with this script (repo scripts/ in dev,
+# /usr/local/bin in the container). The .sh suffix only exists in dev.
+_LIB="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+for _name in agent-file-perms-lib; do
+  _path="${_LIB}/${_name}"
+  [ -f "${_path}.sh" ] && _path="${_path}.sh"
+  # shellcheck disable=SC1090
+  source "${_path}"
+done
+
 usage() {
   cat <<EOF
 Usage: $(basename "$0") --provider <provider> --model <model> --mode <default|efficiency> [-ap <agent-path>] [-cp <config-helpers-path>] [help|h|--help|-h]
@@ -187,6 +197,7 @@ disable_gemma_extra() {
       { print }
     ' "$EXTRA_INSTRUCTION_FILE" > "$tmp"
     mv "$tmp" "$EXTRA_INSTRUCTION_FILE"
+    enforce_managed_file_perms "$EXTRA_INSTRUCTION_FILE"
   fi
 
   status_remove_entry "gemma"

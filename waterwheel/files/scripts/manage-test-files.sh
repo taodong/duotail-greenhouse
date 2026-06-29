@@ -5,6 +5,16 @@ AGENT_PATH="${AGENT_PATH:-/agent}"
 TASKS_DIR=""
 TASK_MARKDOWN_FILES=()
 
+# Source shared libs co-located with this script (repo scripts/ in dev,
+# /usr/local/bin in the container). The .sh suffix only exists in dev.
+_LIB="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+for _name in agent-file-perms-lib; do
+  _path="${_LIB}/${_name}"
+  [ -f "${_path}.sh" ] && _path="${_path}.sh"
+  # shellcheck disable=SC1090
+  source "${_path}"
+done
+
 trim() {
     local value="$1"
     value="${value#"${value%%[![:space:]]*}"}"
@@ -89,6 +99,7 @@ copy_markdown_file() {
     fi
 
     cp -f "$src" "$dst_path"
+    enforce_managed_file_perms "$dst_path"
 
     if [ "$overwritten" = true ]; then
         printf '%s' "$dst_basename"

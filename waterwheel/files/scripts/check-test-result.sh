@@ -4,18 +4,22 @@
 set -euo pipefail
 
 AGENT_PATH="${AGENT_PATH:-/agent}"
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+_LIB="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 if [[ "${1:-}" == "-ap" ]]; then
     AGENT_PATH="$2"
     shift 2
 fi
 
+# Source shared libs co-located with this script (repo scripts/ in dev,
+# /usr/local/bin in the container). The .sh suffix only exists in dev.
 # shellcheck source=run-qa-lib.sh
-# Support both development (.sh) and container (no extension) installs.
-_LIB="${SCRIPT_DIR}/run-qa-lib"
-# shellcheck disable=SC1090
-source "${_LIB}.sh" 2>/dev/null || source "${_LIB}"
+for _name in run-qa-lib; do
+  _path="${_LIB}/${_name}"
+  [ -f "${_path}.sh" ] && _path="${_path}.sh"
+  # shellcheck disable=SC1090
+  source "${_path}"
+done
 
 RESULTS_FILE="${AGENT_PATH}/outputs/test-results.json"
 

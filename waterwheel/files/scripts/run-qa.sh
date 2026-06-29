@@ -13,10 +13,15 @@ for arg in "$@"; do
 done
 
 # --- 0.1 SINGLE-INSTANCE LOCK ---
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-_LIB="${SCRIPT_DIR}/run-qa-lib"
-# shellcheck disable=SC1090
-source "${_LIB}.sh" 2>/dev/null || source "${_LIB}"
+# Source shared libs co-located with this script (repo scripts/ in dev,
+# /usr/local/bin in the container). The .sh suffix only exists in dev.
+_LIB="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+for _name in run-qa-lib; do
+  _path="${_LIB}/${_name}"
+  [ -f "${_path}.sh" ] && _path="${_path}.sh"
+  # shellcheck disable=SC1090
+  source "${_path}"
+done
 
 LOCK_FILE="$RUN_QA_LOCK_FILE"
 PID_FILE="$RUN_QA_PID_FILE"

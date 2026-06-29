@@ -8,6 +8,16 @@ set -euo pipefail
 AGENT_PATH="${AGENT_PATH:-/agent}"
 CONFIG_HELPERS_PATH="/config-helpers"
 
+# Source shared libs co-located with this script (repo scripts/ in dev,
+# /usr/local/bin in the container). The .sh suffix only exists in dev.
+_LIB="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+for _name in agent-file-perms-lib; do
+  _path="${_LIB}/${_name}"
+  [ -f "${_path}.sh" ] && _path="${_path}.sh"
+  # shellcheck disable=SC1090
+  source "${_path}"
+done
+
 usage() {
   cat <<EOF
 Usage: $(basename "$0") [-ap <agent-path>] [-cp <config-helpers-path>] [help|h|--help|-h]
@@ -127,3 +137,8 @@ rewrite_global_context() {
 
 enable_host_testing
 rewrite_global_context
+
+# Normalize permissions of any instruction files this run created or modified.
+enforce_managed_file_perms "$EXTRA_INSTRUCTION_FILE"
+enforce_managed_file_perms "$ALLOWED_DOMAINS_FILE"
+enforce_managed_file_perms "$GLOBAL_CONTEXT_FILE"

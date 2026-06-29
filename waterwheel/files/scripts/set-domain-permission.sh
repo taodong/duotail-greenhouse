@@ -7,6 +7,16 @@ AGENT_PATH="${AGENT_PATH:-/agent}"
 REWRITE_LOCALHOST=false
 DOMAIN_ARGS=()
 
+# Source shared libs co-located with this script (repo scripts/ in dev,
+# /usr/local/bin in the container). The .sh suffix only exists in dev.
+_LIB="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+for _name in agent-file-perms-lib; do
+  _path="${_LIB}/${_name}"
+  [ -f "${_path}.sh" ] && _path="${_path}.sh"
+  # shellcheck disable=SC1090
+  source "${_path}"
+done
+
 usage() {
   cat <<EOF
 Usage: $(basename "$0") [-ap <agent-path>] [-l] <domain1,domain2,...> [help|h|--help|-h]
@@ -111,6 +121,7 @@ TMP_FILE="$(mktemp)"
   done
 } > "$TMP_FILE"
 mv "$TMP_FILE" "$TARGET_FILE"
+enforce_managed_file_perms "$TARGET_FILE"
 
 echo "Wrote ${#ENTRIES[@]} domain(s) to ${TARGET_FILE}:"
 for entry in "${ENTRIES[@]}"; do
