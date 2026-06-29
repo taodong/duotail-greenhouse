@@ -2,11 +2,15 @@
 # Shared helper for normalizing permissions of files the manager scripts write
 # into the agent's tasks/ and instructions/ directories.
 #
-# These two directories are root-owned (mode 550); the manager scripts run as
+# These two directories are root-owned (mode 2550); the manager scripts run as
 # root and create or replace files under them. Whenever such a file is written
-# by root, restrict it to 640 (rw for the owner, r for the group, nothing for
-# others) so the folder owner keeps read access while the file is not exposed
-# world-wide.
+# by root, set its group to agentgroup and restrict it to 640 (rw for the owner,
+# r for the group, nothing for others) so agentuser keeps read access via the
+# group bit while the file is not exposed world-wide.
+#
+# The group fix matters because a file created by root (e.g. via mktemp + mv)
+# only inherits agentgroup when the parent dir has the setgid bit; the explicit
+# chgrp here guarantees the right group regardless of how the file was written.
 #
 # This file only defines a function; it is meant to be sourced.
 
@@ -26,5 +30,6 @@ enforce_managed_file_perms() {
     esac
 
     [ -f "$path" ] || return 0
+    chgrp agentgroup "$path" 2>/dev/null || true
     chmod 640 "$path" 2>/dev/null || true
 }

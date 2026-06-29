@@ -103,7 +103,7 @@ WORKDIR /agent
 
 RUN mkdir -p /agent/instructions /agent/tasks /agent/outputs /agent/bin && \
     chown root:agentgroup /agent/instructions /agent/tasks && \
-    chmod 550 /agent/instructions /agent/tasks && \
+    chmod 2550 /agent/instructions /agent/tasks && \
     chown agentuser:agentgroup /agent/outputs /agent/bin && \
     chmod 770 /agent/outputs /agent/bin
 
@@ -214,6 +214,13 @@ FROM system-deps AS final
 # Copy the fully-installed agent workspace from the builder stage
 COPY --from=agent-builder --chown=agentuser:agentgroup /agent /agent
 COPY --from=agent-builder --chown=root:root /config-helpers /config-helpers
+
+# Re-assert the read-only config dirs deterministically: root-owned, group
+# agentgroup, with the setgid bit so files dropped in by the (root) manager
+# scripts inherit agentgroup and stay readable by agentuser. COPY --chown above
+# resets ownership and may not preserve the setgid mode bit, so set it here.
+RUN chown root:agentgroup /agent/instructions /agent/tasks && \
+    chmod 2550 /agent/instructions /agent/tasks
 
 # -----------------------------------------------------------------------------
 # 6. MANAGER SCRIPTS
