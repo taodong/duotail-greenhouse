@@ -126,6 +126,22 @@ It consolidates logic that was previously duplicated across `run-qa` and `stop-q
 
 ---
 
+## agent-file-perms-lib (internal shared library)
+
+`agent-file-perms-lib` is a shared bash library sourced by every manager script that writes into `$AGENT_PATH/tasks` or `$AGENT_PATH/instructions`. It is not intended to be invoked directly.
+
+It exposes a single helper:
+
+| Symbol | Description |
+| --- | --- |
+| `enforce_managed_file_perms <path>` | If `<path>` lives under a `tasks/` or `instructions/` directory and exists, set its mode to `640` (owner `rw`, group `r`, others none). Paths outside those two directories, empty arguments, and missing files are ignored; `chmod` failures are tolerated. |
+
+`/agent/tasks` and `/agent/instructions` are root-owned (`550`) and the agent reads from them as a member of `agentgroup`. The manager scripts run as `root`, so a freshly written file would otherwise default to a world-readable mode. After each write, the owning script calls `enforce_managed_file_perms` so the folder owner keeps read access while the file is never left world-readable.
+
+Callers: `upload-test-task`, `upload-instruction-file`, `manage-global-constants`, `preset-context`, `set-domain-permission`, `manage-test-files`, `config-ai-provider`, and `enable-test-on-host`.
+
+---
+
 ## file-upload-lib Usage
 
 `file-upload-lib` reads stdin and saves it to an absolute target file path.
@@ -856,8 +872,8 @@ Use `preset-context` to read and update this file. See [preset-context Usage](#p
 | Path                                        | Owner:Group | Mode | `agentuser` access | Notes                                                     |
 |---------------------------------------------| --- | --- | --- |-----------------------------------------------------------|
 | `/agent`                                    | `agentuser:agentgroup` | varies | Mostly read/write in owned tree | Copied with `--chown=agentuser:agentgroup` in `Dockerfile` |
-| `/agent/instructions`                       | `root:agentgroup` | `550` | Read + traverse, no write | Policy/config files mounted here are read-only at runtime |
-| `/agent/tasks`                              | `root:agentgroup` | `550` | Read + traverse, no write | Task input files are read-only at runtime                 |
+| `/agent/instructions`                       | `root:agentgroup` | `550` | Read + traverse, no write | Policy/config files are read-only at runtime; files written by the manager scripts are set to `640` (see `agent-file-perms-lib`) |
+| `/agent/tasks`                              | `root:agentgroup` | `550` | Read + traverse, no write | Task input files are read-only at runtime; files written by the manager scripts are set to `640` (see `agent-file-perms-lib`) |
 | `/agent/outputs`                            | `agentuser:agentgroup` | `770` | Full rwx | Agent writes logs and output artifacts here               |
 | `/agent/bin`                                | `agentuser:agentgroup` | `770` | Full rwx | Writable bin directory for agent use                      |
 | `/services/playwright`                      | `root:root` | `700` | No access | Playwright MCP service directory, root-only               |
@@ -875,6 +891,7 @@ Use `preset-context` to read and update this file. See [preset-context Usage](#p
 | `/usr/local/bin/config-ai-provider`         | `root:root` | `700` | Cannot execute | Non-interactively applies provider/model/mode settings    |
 | `/usr/local/bin/run-qa-lib`                 | `root:root` | `700` | Cannot execute | Shared library sourced by `run-qa`, `stop-qa`, `check-test-result` |
 | `/usr/local/bin/file-upload-lib`            | `root:root` | `700` | Cannot execute | Saves stdin content to a target file path |
+| `/usr/local/bin/agent-file-perms-lib`       | `root:root` | `700` | Cannot execute | Shared library that restricts `tasks/`-`instructions/` files to `640` |
 | `/usr/local/bin/manage-global-constants`    | `root:root` | `700` | Cannot execute | Manages entries in `global-context.json`                  |
 | `/usr/local/bin/manage-test-files`          | `root:root` | `700` | Cannot execute | Manages markdown test files in `/agent/tasks`             |
 | `/usr/local/bin/preset-context`             | `root:root` | `700` | Cannot execute | Manages entries in `preset-context.json`                  |
@@ -894,6 +911,7 @@ Use `preset-context` to read and update this file. See [preset-context Usage](#p
 | `config-agent`             | ✅ | ❌ | `/usr/local/bin/config-agent` (mode `700`)               |
 | `config-ai-provider`       | ✅ | ❌ | `/usr/local/bin/config-ai-provider` (mode `700`)         |
 | `file-upload-lib`          | ✅ | ❌ | `/usr/local/bin/file-upload-lib` (mode `700`)            |
+| `agent-file-perms-lib`     | ✅ | ❌ | `/usr/local/bin/agent-file-perms-lib` (mode `700`)       |
 | `manage-global-constants`  | ✅ | ❌ | `/usr/local/bin/manage-global-constants` (mode `700`)    |
 | `manage-test-files`        | ✅ | ❌ | `/usr/local/bin/manage-test-files` (mode `700`)          |
 | `preset-context`            | ✅ | ❌ | `/usr/local/bin/preset-context` (mode `700`)              |
