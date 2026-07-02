@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-repo=/Users/taodong/Work/code/duotail-greenhouse
+repo="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 scripts="$repo/waterwheel/files/scripts"
 tmpdir=$(mktemp -d)
 agent="$tmpdir/agent"

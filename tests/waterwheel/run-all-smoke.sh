@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-repo=/Users/taodong/Work/code/duotail-greenhouse
+repo="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 tests_dir="$repo/tests/waterwheel"
 
 echo '== run manage-test-files smoke =='
@@ -27,6 +27,9 @@ bash "$tests_dir/enable-test-on-host-smoke.sh"
 
 echo '== run reset-test-config smoke =='
 bash "$tests_dir/reset-test-config-smoke.sh"
+
+echo '== run customize-playwright-config smoke =='
+bash "$tests_dir/customize-playwright-config-smoke.sh"
 
 echo 'all smoke checks passed'
 

@@ -1,8 +1,9 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-repo=/Users/taodong/Work/code/duotail-greenhouse
+repo="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 script="$repo/waterwheel/files/scripts/enable-test-on-host.sh"
+playwright_template="$repo/waterwheel/files/bootstrap/playwright-mcp-config-default.json"
 tmpdir=$(mktemp -d)
 
 cleanup() {
@@ -16,6 +17,7 @@ mkdir -p "$agent/instructions" "$helpers"
 
 # Seed config-helpers and instruction files.
 printf 'Replace localhost with host.docker.internal during host testing.\n' > "$helpers/extra-local.md"
+cp "$playwright_template" "$helpers/playwright-mcp-config-default.json"
 printf 'allowed:\n  - http://localhost:8080\n  - http://localhost:8025\n' > "$agent/instructions/allowed-domains.yaml"
 printf '{\n  "LOGIN_URL": "http://localhost:8080/login",\n  "EMAIL_URL": "http://localhost:8025"\n}\n' > "$agent/instructions/global-context.json"
 
@@ -45,6 +47,21 @@ if grep -q 'localhost' "$agent/instructions/global-context.json"; then
 fi
 if ! grep -Fq 'host.docker.internal:8080' "$agent/instructions/global-context.json"; then
   echo 'expected host.docker.internal in global-context.json' >&2
+  exit 1
+fi
+playwright_config="$agent/instructions/playwright-mcp-config.json"
+if [[ ! -f "$playwright_config" ]]; then
+  echo 'expected playwright-mcp-config.json to be created' >&2
+  exit 1
+fi
+if ! jq -e '.browser.launchOptions.args[] | select(startswith("--unsafely-treat-insecure-origin-as-secure="))' "$playwright_config" > /dev/null; then
+  echo 'expected --unsafely-treat-insecure-origin-as-secure in playwright-mcp-config.json' >&2
+  cat "$playwright_config" >&2
+  exit 1
+fi
+actual_arg=$(jq -r '.browser.launchOptions.args[] | select(startswith("--unsafely-treat-insecure-origin-as-secure="))' "$playwright_config")
+if [[ "$actual_arg" != *"host.docker.internal:8080"* ]] || [[ "$actual_arg" != *"host.docker.internal:8025"* ]]; then
+  echo "expected both host.docker.internal domains in playwright arg; got: $actual_arg" >&2
   exit 1
 fi
 

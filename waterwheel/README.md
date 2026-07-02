@@ -138,7 +138,7 @@ It exposes a single helper:
 
 `/agent/tasks` and `/agent/instructions` are root-owned (`550`) and the agent reads from them as a member of `agentgroup`. The manager scripts run as `root`, so a freshly written file would otherwise default to a world-readable mode. After each write, the owning script calls `enforce_managed_file_perms` so the folder owner keeps read access while the file is never left world-readable.
 
-Callers: `upload-test-task`, `upload-instruction-file`, `manage-global-constants`, `preset-context`, `set-domain-permission`, `manage-test-files`, `config-ai-provider`, and `enable-test-on-host`.
+Callers: `upload-test-task`, `upload-instruction-file`, `manage-global-constants`, `preset-context`, `set-domain-permission`, `manage-test-files`, `config-ai-provider`, `enable-test-on-host`, and `customize-playwright-config`.
 
 ---
 
@@ -645,6 +645,48 @@ set-domain-permission -l https://www.google.com,"https://*.wikipedia.org","http:
 
 # Use a custom agent path
 set-domain-permission -ap /tmp/my-agent -l "http://localhost:8025"
+```
+
+---
+
+## customize-playwright-config Usage
+
+`customize-playwright-config` customizes `$AGENT_PATH/instructions/playwright-mcp-config.json` using `/config-helpers/playwright-mcp-config-default.json` as the base template. All operations are replace-only: each run rewrites the output file from the template without accumulating previous customizations.
+
+```bash
+customize-playwright-config [-ap <agent-path>] [-cp <config-helpers-path>] <operation> [args]
+```
+
+### Options
+| Option | Description |
+| --- | --- |
+| `-ap <path>` | Override the agent path (default: `/agent`) |
+| `-cp <path>` | Override the config-helpers path (default: `/config-helpers`) |
+| `-h`, `--help`, `h`, `help` | Show usage help |
+
+### Operations
+| Operation | Arguments | Description |
+| --- | --- | --- |
+| `--clear` | — | Remove `$AGENT_PATH/instructions/playwright-mcp-config.json` if it exists; do nothing otherwise. Cannot be combined with other operations. |
+| `--treat-as-secure` | `<domain1,domain2,...>` | Grant secure-context browser APIs to the given HTTP origins. Adds `--unsafely-treat-insecure-origin-as-secure=<domains>` and `--ignore-certificate-errors` to the Chromium launch args. Domains are comma-delimited HTTP URLs. |
+
+### Examples
+```bash
+# Grant secure-context APIs to local dev server origins
+customize-playwright-config --treat-as-secure http://host.docker.internal:8080,http://host.docker.internal:8081
+# Produces playwright-mcp-config.json with:
+# "args": [
+#   "--disable-gpu",
+#   "--disable-setuid-sandbox",
+#   "--unsafely-treat-insecure-origin-as-secure=http://host.docker.internal:8080,http://host.docker.internal:8081",
+#   "--ignore-certificate-errors"
+# ]
+
+# Use a custom agent path
+customize-playwright-config -ap /tmp/my-agent --treat-as-secure http://host.docker.internal:8080
+
+# Remove the customized config (revert to default Playwright MCP behavior)
+customize-playwright-config --clear
 ```
 
 ---

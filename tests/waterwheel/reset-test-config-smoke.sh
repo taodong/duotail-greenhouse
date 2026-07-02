@@ -1,9 +1,10 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-repo=/Users/taodong/Work/code/duotail-greenhouse
+repo="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 reset="$repo/waterwheel/files/scripts/reset-test-config.sh"
 enable="$repo/waterwheel/files/scripts/enable-test-on-host.sh"
+playwright_template="$repo/waterwheel/files/bootstrap/playwright-mcp-config-default.json"
 tmpdir=$(mktemp -d)
 
 cleanup() {
@@ -65,6 +66,7 @@ a4="$tmpdir/a4/agent"
 h4="$tmpdir/a4/helpers"
 mkdir -p "$a4/instructions" "$h4"
 printf 'Replace localhost with host.docker.internal.\n' > "$h4/extra-local.md"
+cp "$playwright_template" "$h4/playwright-mcp-config-default.json"
 printf 'allowed:\n  - http://localhost:8080\n' > "$a4/instructions/allowed-domains.yaml"
 bash "$enable" -ap "$a4" -cp "$h4" >/dev/null
 if ! grep -q 'host-testing' "$h4/agent-config-status.yaml"; then

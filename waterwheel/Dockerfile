@@ -203,6 +203,7 @@ COPY --chown=root:root files/bootstrap/system-prompt-cn.md /config-helpers/syste
 COPY --chown=root:root files/bootstrap/system-prompt-default.md /config-helpers/system-prompt-default.md
 COPY --chown=root:root files/bootstrap/modes/ /config-helpers/modes/
 COPY --chown=root:root files/bootstrap/default-agent-config.json /config-helpers/default-agent-config.json
+COPY --chown=root:root files/bootstrap/playwright-mcp-config-default.json /config-helpers/playwright-mcp-config-default.json
 
 
 # =============================================================================
@@ -250,6 +251,7 @@ COPY files/scripts/upload-instruction-file.sh /usr/local/bin/upload-instruction-
 COPY files/scripts/upload-test-task.sh /usr/local/bin/upload-test-task
 COPY files/scripts/enable-test-on-host.sh /usr/local/bin/enable-test-on-host
 COPY files/scripts/output-context-variables.sh /usr/local/bin/output-context-variables
+COPY files/scripts/customize-playwright-config.sh /usr/local/bin/customize-playwright-config
 
 RUN chown root:root /usr/local/bin/playwright-mcp \
                    /usr/local/bin/email-mcp \
@@ -273,7 +275,8 @@ RUN chown root:root /usr/local/bin/playwright-mcp \
                    /usr/local/bin/upload-instruction-file \
                    /usr/local/bin/upload-test-task \
                    /usr/local/bin/enable-test-on-host \
-                   /usr/local/bin/output-context-variables && \
+                   /usr/local/bin/output-context-variables \
+                   /usr/local/bin/customize-playwright-config && \
     chmod 700 /usr/local/bin/playwright-mcp \
               /usr/local/bin/email-mcp \
               /usr/local/bin/run-qa \
@@ -296,7 +299,8 @@ RUN chown root:root /usr/local/bin/playwright-mcp \
               /usr/local/bin/upload-instruction-file \
               /usr/local/bin/upload-test-task \
               /usr/local/bin/enable-test-on-host \
-              /usr/local/bin/output-context-variables
+              /usr/local/bin/output-context-variables \
+              /usr/local/bin/customize-playwright-config
 
 # -----------------------------------------------------------------------------
 # 7. SUPERVISOR CONFIGURATION

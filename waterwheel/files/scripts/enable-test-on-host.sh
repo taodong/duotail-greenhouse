@@ -27,6 +27,8 @@ action in config-agent (enable_host_testing):
   - Appends the host-testing block from extra-local.md to extra-instructions.md
   - Records the host-testing entry in the agent config status file
   - Rewrites localhost -> host.docker.internal in allowed-domains.yaml
+  - Calls customize-playwright-config --treat-as-secure for every
+    http://host.docker.internal URL found in allowed-domains.yaml
 
 In addition, if \$AGENT_PATH/instructions/global-context.json exists, every
 'localhost' value in it is rewritten to 'host.docker.internal'.
@@ -125,6 +127,31 @@ enable_host_testing() {
   echo "  Host testing enabled."
 }
 
+update_playwright_secure_origins() {
+  if [[ ! -f "$ALLOWED_DOMAINS_FILE" ]]; then
+    return 0
+  fi
+
+  # Collect http:// host.docker.internal entries — these are insecure origins
+  # that need secure-context browser APIs (e.g. clipboard, camera).
+  local domains=()
+  while IFS= read -r domain; do
+    [[ -n "$domain" ]] && domains+=("$domain")
+  done < <(grep -oE 'http://host\.docker\.internal[^[:space:]]*' "$ALLOWED_DOMAINS_FILE" || true)
+
+  if [[ ${#domains[@]} -eq 0 ]]; then
+    return 0
+  fi
+
+  local joined
+  joined="$(IFS=,; echo "${domains[*]}")"
+
+  local _customize="${_LIB}/customize-playwright-config"
+  [[ -f "${_customize}.sh" ]] && _customize="${_customize}.sh"
+
+  bash "$_customize" -ap "$AGENT_PATH" -cp "$CONFIG_HELPERS_PATH" --treat-as-secure "$joined"
+}
+
 rewrite_global_context() {
   if [[ -f "$GLOBAL_CONTEXT_FILE" ]] && grep -q "localhost" "$GLOBAL_CONTEXT_FILE"; then
     local tmp
@@ -136,6 +163,7 @@ rewrite_global_context() {
 }
 
 enable_host_testing
+update_playwright_secure_origins
 rewrite_global_context
 
 # Normalize permissions of any instruction files this run created or modified.
