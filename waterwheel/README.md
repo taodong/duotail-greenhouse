@@ -128,15 +128,15 @@ It consolidates logic that was previously duplicated across `run-qa` and `stop-q
 
 ## agent-file-perms-lib (internal shared library)
 
-`agent-file-perms-lib` is a shared bash library sourced by every manager script that writes into `$AGENT_PATH/tasks` or `$AGENT_PATH/instructions`. It is not intended to be invoked directly.
+`agent-file-perms-lib` is a shared bash library sourced by every manager script that writes into `$AGENT_PATH/tasks`, `$AGENT_PATH/instructions`, or `$AGENT_PATH/skills`. It is not intended to be invoked directly.
 
 It exposes a single helper:
 
 | Symbol | Description |
 | --- | --- |
-| `enforce_managed_file_perms <path>` | If `<path>` lives under a `tasks/` or `instructions/` directory and exists, set its mode to `640` (owner `rw`, group `r`, others none). Paths outside those two directories, empty arguments, and missing files are ignored; `chmod` failures are tolerated. |
+| `enforce_managed_file_perms <path>` | If `<path>` lives under a `tasks/`, `instructions/`, or `skills/` directory and exists, set its mode to `640` (owner `rw`, group `r`, others none). Paths outside those directories, empty arguments, and missing files are ignored; `chmod` failures are tolerated. |
 
-`/agent/tasks` and `/agent/instructions` are root-owned (`550`) and the agent reads from them as a member of `agentgroup`. The manager scripts run as `root`, so a freshly written file would otherwise default to a world-readable mode. After each write, the owning script calls `enforce_managed_file_perms` so the folder owner keeps read access while the file is never left world-readable.
+`/agent/tasks`, `/agent/instructions`, and `/agent/skills` are root-owned (`2550`, i.e. `550` + setgid) and the agent reads from them as a member of `agentgroup`. The manager scripts run as `root`, so a freshly written file would otherwise default to a world-readable mode. After each write, the owning script calls `enforce_managed_file_perms` so the folder owner keeps read access while the file is never left world-readable.
 
 Callers: `upload-test-task`, `upload-instruction-file`, `manage-global-constants`, `preset-context`, `set-domain-permission`, `manage-test-files`, `config-ai-provider`, `enable-test-on-host`, and `customize-playwright-config`.
 

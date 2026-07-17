@@ -101,9 +101,9 @@ RUN groupadd -g 2000 agentgroup && \
 
 WORKDIR /agent
 
-RUN mkdir -p /agent/instructions /agent/tasks /agent/outputs /agent/bin && \
-    chown root:agentgroup /agent/instructions /agent/tasks && \
-    chmod 2550 /agent/instructions /agent/tasks && \
+RUN mkdir -p /agent/instructions /agent/tasks /agent/skills /agent/outputs /agent/bin && \
+    chown root:agentgroup /agent/instructions /agent/tasks /agent/skills && \
+    chmod 2550 /agent/instructions /agent/tasks /agent/skills && \
     chown agentuser:agentgroup /agent/outputs /agent/bin && \
     chmod 770 /agent/outputs /agent/bin
 
@@ -150,11 +150,13 @@ RUN cd /agent && \
     find . -maxdepth 1 -type d \
       -not -name "node_modules" \
       -not -name "config" \
+      -not -name "builtin-skills" \
       -not -name "dist" \
       -not -name "build" \
       -not -name "lib" \
       -not -name "instructions" \
       -not -name "tasks" \
+      -not -name "skills" \
       -not -name "outputs" \
       -not -name "bin" \
       -not -name "." \
@@ -220,8 +222,8 @@ COPY --from=agent-builder --chown=root:root /config-helpers /config-helpers
 # agentgroup, with the setgid bit so files dropped in by the (root) manager
 # scripts inherit agentgroup and stay readable by agentuser. COPY --chown above
 # resets ownership and may not preserve the setgid mode bit, so set it here.
-RUN chown root:agentgroup /agent/instructions /agent/tasks && \
-    chmod 2550 /agent/instructions /agent/tasks
+RUN chown root:agentgroup /agent/instructions /agent/tasks /agent/skills && \
+    chmod 2550 /agent/instructions /agent/tasks /agent/skills
 
 # -----------------------------------------------------------------------------
 # 6. MANAGER SCRIPTS
