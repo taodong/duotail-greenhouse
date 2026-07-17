@@ -57,7 +57,15 @@ while [[ $# -gt 0 ]]; do
       ;;
     --)
       shift
-      [[ $# -gt 0 ]] && { SKILL_NAME="$1"; shift; }
+      if [[ $# -gt 0 ]]; then
+        if [[ -n "$SKILL_NAME" ]]; then
+          echo "Error: unexpected extra argument: $1" >&2
+          usage >&2
+          exit 1
+        fi
+        SKILL_NAME="$1"
+        shift
+      fi
       ;;
     -*)
       echo "Unknown option: $1" >&2
