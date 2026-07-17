@@ -22,6 +22,9 @@ bash "$tests_dir/upload-instruction-file-smoke.sh"
 echo '== run upload-test-task smoke =='
 bash "$tests_dir/upload-test-task-smoke.sh"
 
+echo '== run load-test-skills smoke =='
+bash "$tests_dir/load-test-skills-smoke.sh"
+
 echo '== run enable-test-on-host smoke =='
 bash "$tests_dir/enable-test-on-host-smoke.sh"
 

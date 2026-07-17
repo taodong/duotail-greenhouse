@@ -33,3 +33,29 @@ enforce_managed_file_perms() {
     chgrp agentgroup "$path" 2>/dev/null || true
     chmod 640 "$path" 2>/dev/null || true
 }
+
+# enforce_managed_dir_perms <path>
+#
+# Apply group ownership agentgroup and mode 2550 (r-x for owner and group,
+# setgid so children inherit agentgroup, nothing for others) to a directory
+# under a tasks/, instructions/, or skills/ path — matching the root-owned
+# managed parent dirs so agentuser can traverse and read via the group bit.
+#
+# Only applied when running as root (the container case). Unlike the file
+# helper, a 2550 directory removes the owner write bit, so applying it as a
+# non-root dev user would lock that user out of a later overwrite; the root
+# guard avoids that while keeping the file helper's best-effort tolerance.
+enforce_managed_dir_perms() {
+    local path="$1"
+    [ -n "$path" ] || return 0
+
+    case "$path" in
+        */tasks/*|*/instructions/*|*/skills/*) ;;
+        *) return 0 ;;
+    esac
+
+    [ -d "$path" ] || return 0
+    [ "$(id -u)" = 0 ] || return 0
+    chgrp agentgroup "$path" 2>/dev/null || true
+    chmod 2550 "$path" 2>/dev/null || true
+}

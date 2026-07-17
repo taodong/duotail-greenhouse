@@ -130,15 +130,16 @@ It consolidates logic that was previously duplicated across `run-qa` and `stop-q
 
 `agent-file-perms-lib` is a shared bash library sourced by every manager script that writes into `$AGENT_PATH/tasks`, `$AGENT_PATH/instructions`, or `$AGENT_PATH/skills`. It is not intended to be invoked directly.
 
-It exposes a single helper:
+It exposes two helpers:
 
 | Symbol | Description |
 | --- | --- |
 | `enforce_managed_file_perms <path>` | If `<path>` lives under a `tasks/`, `instructions/`, or `skills/` directory and exists, set its mode to `640` (owner `rw`, group `r`, others none). Paths outside those directories, empty arguments, and missing files are ignored; `chmod` failures are tolerated. |
+| `enforce_managed_dir_perms <path>` | If `<path>` is a directory under a `tasks/`, `instructions/`, or `skills/` path and the caller is `root`, set its group to `agentgroup` and mode to `2550` (setgid; `r-x` for owner and group, nothing for others) so `agentuser` can traverse and read it. Paths outside those directories, non-directories, empty arguments, and non-root callers are ignored; `chgrp`/`chmod` failures are tolerated. The root guard exists because a `2550` directory drops the owner write bit, which would lock a non-root dev user out of a later overwrite. |
 
-`/agent/tasks`, `/agent/instructions`, and `/agent/skills` are root-owned (`550`) and the agent reads from them as a member of `agentgroup`. The manager scripts run as `root`, so a freshly written file would otherwise default to a world-readable mode. After each write, the owning script calls `enforce_managed_file_perms` so the folder owner keeps read access while the file is never left world-readable.
+`/agent/tasks`, `/agent/instructions`, and `/agent/skills` are root-owned (`550`) and the agent reads from them as a member of `agentgroup`. The manager scripts run as `root`, so a freshly written file or directory would otherwise default to a world-readable mode. After each write, the owning script calls `enforce_managed_file_perms` (and, for scripts that create subdirectories such as `load-test-skills`, `enforce_managed_dir_perms`) so `agentgroup` keeps read access while the entry is never left world-readable.
 
-Callers: `upload-test-task`, `upload-instruction-file`, `manage-global-constants`, `preset-context`, `set-domain-permission`, `manage-test-files`, `config-ai-provider`, `enable-test-on-host`, and `customize-playwright-config`.
+Callers: `upload-test-task`, `upload-instruction-file`, `load-test-skills`, `manage-global-constants`, `preset-context`, `set-domain-permission`, `manage-test-files`, `config-ai-provider`, `enable-test-on-host`, and `customize-playwright-config`.
 
 ---
 
@@ -755,6 +756,44 @@ cat ./checkout.md | upload-test-task checkout.md
 
 # Use a custom agent path
 cat ./signup.md | upload-test-task -ap /tmp/my-agent signup.md
+```
+
+---
+
+## load-test-skills Usage
+
+`load-test-skills` creates a skill folder under the skills directory and writes stdin content to a `SKILL.md` inside it. The skills directory is `$SKILL_DIR` when set, otherwise `$AGENT_PATH/skills`; the `-name <skill-name>` argument becomes the folder name and the target file is `<skills-dir>/<skill-name>/SKILL.md` (written via `file-upload-lib`). By default an existing skill folder is left untouched; pass `--force`/`-f` to overwrite its `SKILL.md`.
+
+```bash
+load-test-skills [-ap <agent-path>] -name <skill-name> [--force]
+```
+
+### Options
+| Option | Description |
+| --- | --- |
+| `-name`, `--name <skill-name>` | Name of the skill folder to create (required) |
+| `-ap <path>` | Override the agent path (default: `/agent`) |
+| `-f`, `--force` | Overwrite an existing skill folder's `SKILL.md` |
+| `-h`, `--help`, `h`, `help` | Show usage help |
+
+### Behavior
+- Content is read from stdin and written to `<skills-dir>/<skill-name>/SKILL.md`.
+- `$SKILL_DIR` overrides the default `$AGENT_PATH/skills` location.
+- A skill name containing a path separator (or `.`/`..`) is rejected so it stays a single folder.
+- An existing skill folder is skipped (stdin is drained, exit `0`) unless `--force` is given.
+- Missing parent directories are created automatically.
+- When run as `root`, the new folder is set to `root:agentgroup` `2550` and `SKILL.md` to `640` so `agentuser` can read them (see [`agent-file-perms-lib`](#agent-file-perms-lib-internal-shared-library)).
+
+### Examples
+```bash
+# Create a skill from stdin
+cat ./SKILL.md | load-test-skills -name login-flow
+
+# Overwrite an existing skill
+cat ./SKILL.md | load-test-skills -name login-flow --force
+
+# Use a custom skills directory
+cat ./SKILL.md | SKILL_DIR=/tmp/skills load-test-skills -name login-flow
 ```
 
 ---
