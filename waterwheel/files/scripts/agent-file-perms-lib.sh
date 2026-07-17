@@ -46,7 +46,7 @@ enforce_managed_file_perms() {
 # non-root dev user would lock that user out of a later overwrite; the root
 # guard avoids that while keeping the file helper's best-effort tolerance.
 enforce_managed_dir_perms() {
-    local path="$1"
+    local path="${1:-}"
     [ -n "$path" ] || return 0
 
     case "$path" in
