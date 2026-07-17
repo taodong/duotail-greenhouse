@@ -82,8 +82,8 @@ The `waterwheel/Dockerfile` has three build stages:
 
 | Path | Owner | Permissions | Purpose |
 |---|---|---|---|
-| `/agent/instructions/` | root:agentgroup | 550 | Read-only policies and configs |
-| `/agent/skills/` | root:agentgroup | 550 | Read-only skill files and configs |
+| `/agent/instructions/` | root:agentgroup | 2550 | Read-only policies and configs |
+| `/agent/skills/` | root:agentgroup | 2550 | Read-only skill files and configs |
 | `/agent/outputs/` | agentuser:agentgroup | 770 | Agent writes logs/artifacts here |
 | `/agent/bin/` | agentuser:agentgroup | 770 | Agent working directory |
 | `/services/playwright/` | root:root | 700 | Inaccessible to agentuser |
