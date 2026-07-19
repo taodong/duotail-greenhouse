@@ -798,6 +798,41 @@ cat ./SKILL.md | SKILL_DIR=/tmp/skills load-test-skills -name login-flow
 
 ---
 
+## display-test-skills Usage
+
+`display-test-skills` lists installed skills, or prints a single skill's `SKILL.md`. Skills are read from two locations: `$AGENT_PATH/builtin-skills` (shipped with the image) and `$AGENT_PATH/skills` (loaded via `load-test-skills`). Without arguments it lists every skill in both, tagging built-in skills with `(built-in)`. With `--show <skill-name>` it prints that skill's `SKILL.md`, preferring a user skill over a built-in one of the same name, and prints `No skill is matched.` when neither exists.
+
+```bash
+display-test-skills [-ap <agent-path>] [--show|-s <skill-name>]
+```
+
+### Options
+| Option | Description |
+| --- | --- |
+| `-s`, `--show <skill-name>` | Print the named skill's `SKILL.md` instead of listing |
+| `-ap <path>` | Override the agent path (default: `/agent`) |
+| `-h`, `--help`, `h`, `help` | Show usage help |
+
+### Behavior
+- List mode enumerates skill folders under `builtin-skills/` (marked `(built-in)`) then `skills/`; if neither has any, it prints `No skills installed.`.
+- Show mode looks up `skills/<name>/SKILL.md` first, then `builtin-skills/<name>/SKILL.md`, so a user skill shadows a built-in of the same name.
+- A skill name containing a path separator (or `.`/`..`) is rejected.
+- When the named skill is not found in either location, it prints `No skill is matched.` and exits `0`.
+
+### Examples
+```bash
+# List all installed skills (built-in and user)
+display-test-skills
+
+# Print a specific skill's SKILL.md
+display-test-skills --show login-flow
+
+# Short flag against a custom agent path
+display-test-skills -ap /agent -s login-flow
+```
+
+---
+
 ## enable-test-on-host Usage
 
 `enable-test-on-host` non-interactively enables host testing, mirroring the **Enable host testing** action in `config-agent` (`enable_host_testing`):
@@ -977,6 +1012,7 @@ Use `preset-context` to read and update this file. See [preset-context Usage](#p
 | `/usr/local/bin/manage-test-files`          | `root:root` | `700` | Cannot execute | Manages markdown test files in `/agent/tasks`             |
 | `/usr/local/bin/preset-context`             | `root:root` | `700` | Cannot execute | Manages entries in `preset-context.json`                  |
 | `/usr/local/bin/display-ai-config`          | `root:root` | `700` | Cannot execute | Prints effective AI provider/model/token mode as JSON     |
+| `/usr/local/bin/display-test-skills`        | `root:root` | `700` | Cannot execute | Lists installed skills or prints a skill's `SKILL.md`     |
 | `/usr/local/bin/reset-test-config`          | `root:root` | `700` | Cannot execute | Deletes task `.md` files and/or instruction files         |
 | `/etc/profile.d/container_env.sh`           | `root:root` | `644` | Read-only | Environment variables forwarded from root to `agentuser`  |
 
@@ -997,6 +1033,7 @@ Use `preset-context` to read and update this file. See [preset-context Usage](#p
 | `manage-test-files`        | ✅ | ❌ | `/usr/local/bin/manage-test-files` (mode `700`)          |
 | `preset-context`            | ✅ | ❌ | `/usr/local/bin/preset-context` (mode `700`)              |
 | `display-ai-config`        | ✅ | ❌ | `/usr/local/bin/display-ai-config` (mode `700`)          |
+| `display-test-skills`      | ✅ | ❌ | `/usr/local/bin/display-test-skills` (mode `700`)        |
 | `reset-test-config`        | ✅ | ❌ | `/usr/local/bin/reset-test-config` (mode `700`)          |
 | `playwright-mcp`           | ✅ | ❌ | Started by Supervisor (`supervisord.conf`)               |
 | `email-mcp`                | ✅ | ❌ | Started by Supervisor (`supervisord.conf`)               |
