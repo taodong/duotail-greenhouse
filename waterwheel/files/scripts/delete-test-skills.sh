@@ -85,7 +85,11 @@ if [[ -z "$SKILL_NAMES" ]]; then
 fi
 
 SKILLS_ROOT="${SKILL_DIR:-${AGENT_PATH}/skills}"
-
+BUILTIN_ROOT="${AGENT_PATH}/builtin-skills"
+if [[ "$SKILLS_ROOT" == "$BUILTIN_ROOT" || "$SKILLS_ROOT" == "$BUILTIN_ROOT/"* ]]; then
+  echo "Error: refusing to operate on built-in skills directory: $SKILLS_ROOT" >&2
+  exit 1
+fi
 deleted=0
 skipped=0
 
