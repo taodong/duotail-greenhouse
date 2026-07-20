@@ -835,20 +835,24 @@ display-test-skills -ap /agent -s login-flow
 
 ## delete-test-skills Usage
 
-`delete-test-skills` removes skill folders that were loaded via `load-test-skills`. It accepts a comma-delimited list of skill names and deletes each matching folder under the skills directory. The skills directory is `$SKILL_DIR` when set, otherwise `$AGENT_PATH/skills`. Only user-loaded skills are affected — built-in skills under `$AGENT_PATH/builtin-skills` are never touched.
+`delete-test-skills` removes skill folders that were loaded via `load-test-skills`. It either deletes a comma-delimited list of skill names (`-names`) or clears every user-defined skill (`-a`), removing each matching folder under the skills directory. The skills directory is `$SKILL_DIR` when set, otherwise `$AGENT_PATH/skills`. Only user-loaded skills are affected — built-in skills under `$AGENT_PATH/builtin-skills` are never touched.
 
 ```bash
 delete-test-skills [-ap <agent-path>] -names <name1,name2,...>
+delete-test-skills [-ap <agent-path>] -a
 ```
 
 ### Options
 | Option | Description |
 | --- | --- |
-| `-names`, `--names <names>` | Comma-delimited skill folder names to delete (required) |
+| `-names`, `--names <names>` | Comma-delimited skill folder names to delete |
+| `-a`, `--all` | Delete all user-defined skills under the skills directory (mutually exclusive with `-names`) |
 | `-ap <path>` | Override the agent path (default: `/agent`) |
 | `-h`, `--help`, `h`, `help` | Show usage help |
 
 ### Behavior
+- Exactly one of `-names` or `-a` is required; supplying both exits non-zero.
+- With `-a`, every immediate subfolder of the skills directory is deleted; if the directory is missing or empty, the command still exits `0`.
 - Each name is trimmed of surrounding whitespace, so `-names 'a, b'` works as expected.
 - A matching folder `<skills-dir>/<name>` is removed recursively; a name with no matching folder is reported and skipped (the command still exits `0`).
 - `$SKILL_DIR` overrides the default `$AGENT_PATH/skills` location.
@@ -862,6 +866,9 @@ delete-test-skills -names login-flow
 
 # Delete several skills at once
 delete-test-skills -names login-flow,checkout-flow
+
+# Delete all user-defined skills
+delete-test-skills -a
 
 # Use a custom skills directory
 SKILL_DIR=/tmp/skills delete-test-skills -names login-flow
