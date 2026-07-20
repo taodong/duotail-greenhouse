@@ -89,7 +89,7 @@ while [[ $# -gt 0 ]]; do
 done
 
 if [[ "$DELETE_ALL" == true && -n "$SKILL_NAMES" ]]; then
-  echo "Error: -a and -names are mutually exclusive." >&2
+  echo "Error: -a/--all cannot be combined with skill names (-names or positional arguments)." >&2
   usage >&2
   exit 1
 fi
