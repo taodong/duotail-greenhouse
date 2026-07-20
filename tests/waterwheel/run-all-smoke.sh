@@ -28,6 +28,9 @@ bash "$tests_dir/load-test-skills-smoke.sh"
 echo '== run display-test-skills smoke =='
 bash "$tests_dir/display-test-skills-smoke.sh"
 
+echo '== run delete-test-skills smoke =='
+bash "$tests_dir/delete-test-skills-smoke.sh"
+
 echo '== run enable-test-on-host smoke =='
 bash "$tests_dir/enable-test-on-host-smoke.sh"
 
