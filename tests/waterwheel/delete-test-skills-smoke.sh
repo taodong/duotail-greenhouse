@@ -79,7 +79,10 @@ if bash "$script" -ap "$agent" -names 'safe,../evil'; then
   echo 'expected traversal name to fail' >&2
   exit 1
 fi
-
+if [ ! -d "$agent/skills/safe" ]; then
+  echo 'expected no deletions when input contains an invalid skill name' >&2
+  exit 1
+fi
 echo '== extra positional argument fails with an error =='
 if bash "$script" -ap "$agent" -names a b; then
   echo 'expected extra-argument command to fail' >&2
