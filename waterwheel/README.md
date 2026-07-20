@@ -833,6 +833,42 @@ display-test-skills -ap /agent -s login-flow
 
 ---
 
+## delete-test-skills Usage
+
+`delete-test-skills` removes skill folders that were loaded via `load-test-skills`. It accepts a comma-delimited list of skill names and deletes each matching folder under the skills directory. The skills directory is `$SKILL_DIR` when set, otherwise `$AGENT_PATH/skills`. Only user-loaded skills are affected — built-in skills under `$AGENT_PATH/builtin-skills` are never touched.
+
+```bash
+delete-test-skills [-ap <agent-path>] -names <name1,name2,...>
+```
+
+### Options
+| Option | Description |
+| --- | --- |
+| `-names`, `--names <names>` | Comma-delimited skill folder names to delete (required) |
+| `-ap <path>` | Override the agent path (default: `/agent`) |
+| `-h`, `--help`, `h`, `help` | Show usage help |
+
+### Behavior
+- Each name is trimmed of surrounding whitespace, so `-names 'a, b'` works as expected.
+- A matching folder `<skills-dir>/<name>` is removed recursively; a name with no matching folder is reported and skipped (the command still exits `0`).
+- `$SKILL_DIR` overrides the default `$AGENT_PATH/skills` location.
+- Any name containing a path separator (or `.`/`..`) is rejected and the command exits non-zero before deleting anything further.
+- On completion it prints a summary of how many skills were deleted and skipped.
+
+### Examples
+```bash
+# Delete a single skill
+delete-test-skills -names login-flow
+
+# Delete several skills at once
+delete-test-skills -names login-flow,checkout-flow
+
+# Use a custom skills directory
+SKILL_DIR=/tmp/skills delete-test-skills -names login-flow
+```
+
+---
+
 ## enable-test-on-host Usage
 
 `enable-test-on-host` non-interactively enables host testing, mirroring the **Enable host testing** action in `config-agent` (`enable_host_testing`):
