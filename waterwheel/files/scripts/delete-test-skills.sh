@@ -113,7 +113,7 @@ for raw in "${_raw_names[@]}"; do
   names+=("$name")
 done
 
-for name in "${names[@]}"; do
+for name in "${names[@]+"${names[@]}"}"; do
   folder="${SKILLS_ROOT}/${name}"
   if [[ -d "$folder" ]]; then
     rm -rf -- "$folder"
