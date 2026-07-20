@@ -93,9 +93,11 @@ fi
 deleted=0
 skipped=0
 
-# Split the comma-delimited list and process each name.
-IFS=',' read -r -a _names <<< "$SKILL_NAMES"
-for raw in "${_names[@]}"; do
+# Split the comma-delimited list, trim/validate all names first (fail fast with no partial deletes).
+IFS=',' read -r -a _raw_names <<< "$SKILL_NAMES"
+
+names=()
+for raw in "${_raw_names[@]}"; do
   # Trim surrounding whitespace so "a, b" works as expected.
   name="${raw#"${raw%%[![:space:]]*}"}"
   name="${name%"${name##*[![:space:]]}"}"
@@ -108,6 +110,10 @@ for raw in "${_names[@]}"; do
     exit 1
   fi
 
+  names+=("$name")
+done
+
+for name in "${names[@]}"; do
   folder="${SKILLS_ROOT}/${name}"
   if [[ -d "$folder" ]]; then
     rm -rf -- "$folder"
