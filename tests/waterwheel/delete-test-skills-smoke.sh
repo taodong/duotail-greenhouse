@@ -95,6 +95,41 @@ if bash "$script" -z -names name; then
   exit 1
 fi
 
+echo '== -a deletes all user-defined skills =='
+rm -rf "$agent/skills"
+seed_skill "$agent/skills" login-flow
+seed_skill "$agent/skills" checkout
+seed_skill "$agent/skills" search
+out=$(bash "$script" -ap "$agent" -a 2>&1)
+if [ -n "$(ls -A "$agent/skills")" ]; then
+  echo 'expected all skill folders to be removed' >&2
+  exit 1
+fi
+printf '%s\n' "$out" | grep -Fq 'Deleted 3 skill(s), skipped 0.'
+
+echo '== --all is an alias for -a =='
+seed_skill "$agent/skills" only-one
+bash "$script" -ap "$agent" --all
+if [ -n "$(ls -A "$agent/skills")" ]; then
+  echo 'expected --all to remove every skill folder' >&2
+  exit 1
+fi
+
+echo '== -a on an empty skills dir exits 0 =='
+out=$(bash "$script" -ap "$agent" -a 2>&1)
+printf '%s\n' "$out" | grep -Fq 'Deleted 0 skill(s), skipped 0.'
+
+echo '== -a and -names are mutually exclusive =='
+seed_skill "$agent/skills" untouched
+if bash "$script" -ap "$agent" -a -names untouched; then
+  echo 'expected -a with -names to fail' >&2
+  exit 1
+fi
+if [ ! -d "$agent/skills/untouched" ]; then
+  echo 'expected no deletions when -a and -names are combined' >&2
+  exit 1
+fi
+
 echo '== help option prints usage =='
 help_output=$(bash "$script" -h)
 printf '%s\n' "$help_output" | grep -Fq 'Usage: delete-test-skills.sh'
