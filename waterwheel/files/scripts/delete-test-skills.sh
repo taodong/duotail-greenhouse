@@ -110,7 +110,7 @@ for raw in "${_names[@]}"; do
 
   folder="${SKILLS_ROOT}/${name}"
   if [[ -d "$folder" ]]; then
-    rm -rf "$folder"
+    rm -rf -- "$folder"
     echo "Deleted skill: $name"
     deleted=$((deleted + 1))
   else
