@@ -35,7 +35,7 @@ Options:
 Notes:
   - This command mirrors the config_ai_mode update flow without interactive prompts.
   - Once a provider is configured, switching to a different provider is blocked just like config-agent.
-  - DeepSeek Chinese prompt handling and Gemma extra-instruction handling are intentionally skipped.
+  - Gemma extra-instruction handling is intentionally skipped.
 EOF
 }
 
@@ -81,8 +81,6 @@ fi
 
 EXTRA_INSTRUCTION_FILE="${AGENT_PATH}/instructions/extra-instructions.md"
 STATUS_FILE="${CONFIG_HELPERS_PATH}/agent-config-status.yaml"
-SYSTEM_PROMPT_FILE="${AGENT_PATH}/config/system.prompt.md"
-SYSTEM_PROMPT_DEFAULT="${CONFIG_HELPERS_PATH}/system-prompt-default.md"
 AGENT_CONFIG_FILE="${AGENT_PATH}/config/agent-config.json"
 DEFAULT_AGENT_CONFIG_FILE="${CONFIG_HELPERS_PATH}/default-agent-config.json"
 MODES_DIR="${CONFIG_HELPERS_PATH}/modes"
@@ -134,17 +132,6 @@ status_set_provider_mode() {
     cat "$STATUS_FILE" > "$tmp"
     echo "provider-mode: ${mode_slug}" >> "$tmp"
   fi
-  mv "$tmp" "$STATUS_FILE"
-}
-
-status_clear_system_prompt() {
-  if [[ ! -f "$STATUS_FILE" ]]; then
-    return 0
-  fi
-
-  local tmp
-  tmp="$(mktemp)"
-  grep -vE "^system-prompt:" "$STATUS_FILE" > "$tmp"
   mv "$tmp" "$STATUS_FILE"
 }
 
@@ -203,23 +190,6 @@ disable_gemma_extra() {
   status_remove_entry "gemma"
 }
 
-is_cn_prompt_enabled() {
-  [[ -f "$STATUS_FILE" ]] && grep -qE "^system-prompt: cn" "$STATUS_FILE"
-}
-
-disable_cn_prompt() {
-  if [[ ! -f "$SYSTEM_PROMPT_DEFAULT" ]]; then
-    echo "Warning: $SYSTEM_PROMPT_DEFAULT not found. Cannot restore default prompt." >&2
-    return 1
-  fi
-
-  if [[ -f "$SYSTEM_PROMPT_FILE" ]]; then
-    cat "$SYSTEM_PROMPT_DEFAULT" > "$SYSTEM_PROMPT_FILE"
-  fi
-
-  status_clear_system_prompt
-}
-
 resolve_mode_file() {
   case "$MODE" in
     default)
@@ -258,10 +228,6 @@ fi
 
 if is_gemma_extra_enabled; then
   disable_gemma_extra
-fi
-
-if is_cn_prompt_enabled; then
-  disable_cn_prompt
 fi
 
 update_args=(

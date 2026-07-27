@@ -14,7 +14,6 @@
    - [Selecting a Mode (returning runs)](#selecting-a-mode-returning-runs)
    - [Entering the AI Model](#entering-the-ai-model)
    - [Gemma: Ollama Base URL](#gemma-ollama-base-url)
-   - [DeepSeek: Chinese System Prompt](#deepseek-chinese-system-prompt)
    - [Manual Customized](#manual-customized)
    - [Provider Locking](#provider-locking)
    - [Switching Modes Within the Same Provider](#switching-modes-within-the-same-provider)
@@ -40,8 +39,6 @@ The following files must exist before the script is run:
 | `/config-helpers/modes/*.env` | Predefined AI provider mode profiles. |
 | `/config-helpers/extra-local.md` | Extra instruction content appended when host testing is enabled. |
 | `/config-helpers/extra-gemma.md` | Extra instruction content appended when a Gemma mode is applied. |
-| `/config-helpers/system-prompt-cn.md` | Chinese system prompt used when DeepSeek CN prompt is enabled. |
-| `/config-helpers/system-prompt-default.md` | Default system prompt restored when CN prompt is disabled. |
 
 ---
 
@@ -195,17 +192,6 @@ If Ollama runs on the host machine, use `http://host.docker.internal:<port>`.
 
 After confirmation, the content of `extra-gemma.md` is appended to `/agent/instructions/extra-instructions.md` inside a `<!-- gemma-start -->` / `<!-- gemma-end -->` marker block, and `gemma` is recorded in `agent-config-status.yaml` under `extra-instructions`.
 
-### DeepSeek: Chinese System Prompt
-
-When a DeepSeek mode is selected (provider `deepseek`), you are asked whether to use the Chinese system prompt:
-
-```
-  Use Chinese system prompt? [y/N]:
-```
-
-- **y** — overwrites `/agent/config/system.prompt.md` with the content of `system-prompt-cn.md` and sets `system-prompt: cn` in `agent-config-status.yaml`.
-- **n / Enter** — if the Chinese prompt was previously active it is disabled and `system.prompt.md` is restored from `system-prompt-default.md`.
-
 ### Manual Customized
 
 **Manual customized** is only available during [initial mode selection](#initial-mode-selection). It tells the script that you have configured the required environment variables (`AI_PROVIDER`, `AI_MODEL`, `AI_API_KEY`) yourself. The script records `provider-mode: manual` in `agent-config-status.yaml` and suppresses the exit warning. No changes are made to `agent-config.json`.
@@ -225,7 +211,6 @@ When you apply a different mode within the same provider, the script automatical
 | Previous state | Action taken on switch |
 |---|---|
 | Gemma extra instruction active | Removes the `<!-- gemma-start/end -->` block from `extra-instructions.md` and removes `gemma` from `agent-config-status.yaml`. |
-| Chinese system prompt active | Restores `system.prompt.md` from `system-prompt-default.md` and removes `system-prompt: cn` from `agent-config-status.yaml`. |
 
 ### Applied Settings
 
@@ -332,7 +317,6 @@ The warning is suppressed when:
 | File | Modified by |
 |---|---|
 | `/agent/config/agent-config.json` | Option 1 — updates `default` values of `env-params` entries |
-| `/agent/config/system.prompt.md` | Option 1 (DeepSeek) — replaced with CN or default content |
 | `/agent/instructions/allowed-domains.yaml` | Option 2, Option 3 |
 | `/agent/instructions/extra-instructions.md` | Option 1 (Gemma), Option 3 |
 | `/config-helpers/agent-config-status.yaml` | All options — tracks current configuration state |
@@ -350,14 +334,12 @@ extra-instructions:
   - host-testing
   - gemma
 provider-mode: gemma-default
-system-prompt: cn
 ```
 
 | Key | Values | Meaning |
 |---|---|---|
 | `extra-instructions` | array of strings | Active extra-instruction blocks appended to `extra-instructions.md`. Currently used values: `host-testing`, `gemma`. |
 | `provider-mode` | mode slug or `manual` | The currently applied AI provider mode. Slug matches the `.env` filename without the extension (e.g. `anthropic-default`). |
-| `system-prompt` | `cn` | Set when the Chinese system prompt is active. Absent when the default prompt is in use. |
 
 The file is created automatically on first write and deleted if all `extra-instructions` entries are removed and no other keys remain.
 
@@ -407,4 +389,3 @@ cp ./waterwheel/files/bootstrap/default-agent-config.json \
 | `AI_PROVIDER` value | Extra behaviour |
 |---|---|
 | `gemma` | Prompts for `AI_BASE_URL`; appends `extra-gemma.md` block to `extra-instructions.md`. |
-| `deepseek` | Prompts whether to use the Chinese system prompt. |

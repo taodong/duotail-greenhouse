@@ -16,7 +16,7 @@ echo '== resetting instructions strips the extra-instructions array but keeps ot
 a1="$tmpdir/a1/agent"
 h1="$tmpdir/a1/helpers"
 mkdir -p "$a1/instructions" "$h1"
-printf 'extra-instructions:\n  - host-testing\n  - gemma\nprovider-mode: openai-default\nsystem-prompt: cn\n' > "$h1/agent-config-status.yaml"
+printf 'extra-instructions:\n  - host-testing\n  - gemma\nprovider-mode: openai-default\n' > "$h1/agent-config-status.yaml"
 printf 'x\n' > "$a1/instructions/extra-instructions.md"
 printf 'keep\n' > "$a1/instructions/email-permissions.yaml"
 bash "$reset" -ap "$a1" -cp "$h1" -i >/dev/null
@@ -26,8 +26,8 @@ if grep -q 'host-testing' "$status" || grep -q 'extra-instructions:' "$status"; 
   cat "$status" >&2
   exit 1
 fi
-if ! grep -q 'provider-mode: openai-default' "$status" || ! grep -q 'system-prompt: cn' "$status"; then
-  echo 'expected provider-mode and system-prompt keys preserved' >&2
+if ! grep -q 'provider-mode: openai-default' "$status"; then
+  echo 'expected provider-mode key preserved' >&2
   cat "$status" >&2
   exit 1
 fi
