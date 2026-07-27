@@ -100,56 +100,32 @@ if [[ "$DELETE_ALL" != true && -z "$SKILL_NAMES" ]]; then
   exit 1
 fi
 
+# Source shared libs co-located with this script (repo scripts/ in dev,
+# /usr/local/bin in the container). The .sh suffix only exists in dev.
+_LIB="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+_path="${_LIB}/skill-delete-lib"
+[ -f "${_path}.sh" ] && _path="${_path}.sh"
+# shellcheck disable=SC1090
+source "${_path}"
+
 SKILLS_ROOT="${SKILLS_DIR:-${AGENT_PATH}/skills}"
 BUILTIN_ROOT="${AGENT_PATH}/builtin-skills"
 if [[ "$SKILLS_ROOT" == "$BUILTIN_ROOT" || "$SKILLS_ROOT" == "$BUILTIN_ROOT/"* ]]; then
   echo "Error: refusing to operate on built-in skills directory: $SKILLS_ROOT" >&2
   exit 1
 fi
-deleted=0
-skipped=0
 
-names=()
+PARSED_SKILL_NAMES=()
 if [[ "$DELETE_ALL" == true ]]; then
   # Collect every user-defined skill folder directly under <skills-dir>.
   if [[ -d "$SKILLS_ROOT" ]]; then
     for folder in "$SKILLS_ROOT"/*/; do
       [[ -d "$folder" ]] || continue
-      name="$(basename "$folder")"
-      names+=("$name")
+      PARSED_SKILL_NAMES+=("$(basename "$folder")")
     done
   fi
 else
-  # Split the comma-delimited list, trim/validate all names first (fail fast with no partial deletes).
-  IFS=',' read -r -a _raw_names <<< "$SKILL_NAMES"
-
-  for raw in "${_raw_names[@]}"; do
-    # Trim surrounding whitespace so "a, b" works as expected.
-    name="${raw#"${raw%%[![:space:]]*}"}"
-    name="${name%"${name##*[![:space:]]}"}"
-
-    [[ -z "$name" ]] && continue
-
-    # Reject path separators and traversal so the name stays a single folder.
-    if [[ "$name" == */* || "$name" == "." || "$name" == ".." ]]; then
-      echo "Error: invalid skill name (no path separators allowed): $name" >&2
-      exit 1
-    fi
-
-    names+=("$name")
-  done
+  parse_skill_names "$SKILL_NAMES"
 fi
 
-for name in "${names[@]+"${names[@]}"}"; do
-  folder="${SKILLS_ROOT}/${name}"
-  if [[ -d "$folder" ]]; then
-    rm -rf -- "$folder"
-    echo "Deleted skill: $name"
-    deleted=$((deleted + 1))
-  else
-    echo "No matching skill folder: $name" >&2
-    skipped=$((skipped + 1))
-  fi
-done
-
-echo "Done. Deleted ${deleted} skill(s), skipped ${skipped}."
+delete_skill_folders "$SKILLS_ROOT" "${PARSED_SKILL_NAMES[@]+"${PARSED_SKILL_NAMES[@]}"}"

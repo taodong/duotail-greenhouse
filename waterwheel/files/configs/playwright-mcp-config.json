@@ -6,10 +6,11 @@
         "--disable-gpu",
         "--disable-setuid-sandbox"
       ]
-    },
-    "snapshot": {
-      "mode": "none"
     }
+  },
+  "imageResponses": "omit",
+  "outputDir": "/agent/outputs",
+  "snapshot": {
+    "mode": "none"
   }
 }
-
