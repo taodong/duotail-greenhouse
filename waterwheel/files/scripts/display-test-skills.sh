@@ -6,7 +6,6 @@
 set -euo pipefail
 
 AGENT_PATH="${AGENT_PATH:-/agent}"
-SKILLS_DIR="${SKILLS_DIR:-}"
 SHOW_SKILL=""
 
 usage() {
