@@ -2,7 +2,7 @@
 set -euo pipefail
 
 repo="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
-script="$repo/waterwheel/files/scripts/delete-test-skills.sh"
+script="$repo/waterwheel/files/scripts/delete-builtin-skills.sh"
 tmpdir=$(mktemp -d)
 
 cleanup() {
@@ -18,35 +18,61 @@ seed_skill() {
   printf '# %s\n' "$name" > "$root/$name/SKILL.md"
 }
 
-echo '== deletes a single matching skill folder =='
-seed_skill "$agent/skills" login-flow
+echo '== deletes a single matching built-in skill folder =='
+seed_skill "$agent/builtin-skills" login-flow
 bash "$script" -ap "$agent" -n login-flow
-if [ -d "$agent/skills/login-flow" ]; then
+if [ -d "$agent/builtin-skills/login-flow" ]; then
   echo 'expected skill folder to be removed' >&2
   exit 1
 fi
 
 echo '== deletes multiple comma-delimited skills and skips missing ones =='
-seed_skill "$agent/skills" login-flow
-seed_skill "$agent/skills" checkout
-seed_skill "$agent/skills" keep
+seed_skill "$agent/builtin-skills" login-flow
+seed_skill "$agent/builtin-skills" checkout
+seed_skill "$agent/builtin-skills" keep
 out=$(bash "$script" -ap "$agent" -n 'login-flow, checkout, missing' 2>&1)
-if [ -d "$agent/skills/login-flow" ] || [ -d "$agent/skills/checkout" ]; then
+if [ -d "$agent/builtin-skills/login-flow" ] || [ -d "$agent/builtin-skills/checkout" ]; then
   echo 'expected matched skill folders to be removed' >&2
   exit 1
 fi
-if [ ! -d "$agent/skills/keep" ]; then
+if [ ! -d "$agent/builtin-skills/keep" ]; then
   echo 'expected unmatched skill folder to be preserved' >&2
   exit 1
 fi
 printf '%s\n' "$out" | grep -Fq 'No matching skill folder: missing'
 printf '%s\n' "$out" | grep -Fq 'Deleted 2 skill(s), skipped 1.'
 
-echo '== SKILLS_DIR overrides the default skills location =='
-seed_skill "$tmpdir/customskills" foo
-SKILLS_DIR="$tmpdir/customskills" bash "$script" -n foo
-if [ -d "$tmpdir/customskills/foo" ]; then
-  echo 'expected SKILLS_DIR to be honored' >&2
+echo '== --names is an alias for -n =='
+seed_skill "$agent/builtin-skills" via-long
+bash "$script" -ap "$agent" --names via-long
+if [ -d "$agent/builtin-skills/via-long" ]; then
+  echo 'expected --names to remove the skill folder' >&2
+  exit 1
+fi
+
+echo '== a "ww:" prefix targets the unprefixed skill =='
+seed_skill "$agent/builtin-skills" alpha
+bash "$script" -ap "$agent" -n ww:alpha
+if [ -d "$agent/builtin-skills/alpha" ]; then
+  echo 'expected ww:-prefixed name to remove alpha' >&2
+  exit 1
+fi
+
+echo '== "ww:" prefix works within a comma-delimited list =='
+seed_skill "$agent/builtin-skills" alpha
+seed_skill "$agent/builtin-skills" beta
+out=$(bash "$script" -ap "$agent" -n 'ww:alpha,beta' 2>&1)
+if [ -d "$agent/builtin-skills/alpha" ] || [ -d "$agent/builtin-skills/beta" ]; then
+  echo 'expected both alpha and beta to be removed' >&2
+  exit 1
+fi
+printf '%s\n' "$out" | grep -Fq 'Deleted 2 skill(s), skipped 0.'
+
+echo '== "ww: foo" with a space after the prefix targets foo =='
+seed_skill "$agent/builtin-skills" foo
+bash "$script" -ap "$agent" -n 'ww: foo'
+if [ -d "$agent/builtin-skills/foo" ]; then
+  echo 'expected "ww: foo" to remove foo' >&2
   exit 1
 fi
 
@@ -73,16 +99,27 @@ if bash "$script" -ap "$agent" -n .; then
   exit 1
 fi
 
+echo '== a "ww:"-prefixed traversal name still fails with an error =='
+seed_skill "$agent/builtin-skills" safe
+if bash "$script" -ap "$agent" -n 'safe,ww:../evil'; then
+  echo 'expected ww:-prefixed traversal name to fail' >&2
+  exit 1
+fi
+if [ ! -d "$agent/builtin-skills/safe" ]; then
+  echo 'expected no deletions when input contains an invalid skill name' >&2
+  exit 1
+fi
+
 echo '== traversal in a comma-delimited list fails before deleting =='
-seed_skill "$agent/skills" safe
 if bash "$script" -ap "$agent" -n 'safe,../evil'; then
   echo 'expected traversal name to fail' >&2
   exit 1
 fi
-if [ ! -d "$agent/skills/safe" ]; then
+if [ ! -d "$agent/builtin-skills/safe" ]; then
   echo 'expected no deletions when input contains an invalid skill name' >&2
   exit 1
 fi
+
 echo '== extra positional argument fails with an error =='
 if bash "$script" -ap "$agent" -n a b; then
   echo 'expected extra-argument command to fail' >&2
@@ -95,43 +132,8 @@ if bash "$script" -z -n name; then
   exit 1
 fi
 
-echo '== -a deletes all user-defined skills =='
-rm -rf "$agent/skills"
-seed_skill "$agent/skills" login-flow
-seed_skill "$agent/skills" checkout
-seed_skill "$agent/skills" search
-out=$(bash "$script" -ap "$agent" -a 2>&1)
-if [ -n "$(ls -A "$agent/skills")" ]; then
-  echo 'expected all skill folders to be removed' >&2
-  exit 1
-fi
-printf '%s\n' "$out" | grep -Fq 'Deleted 3 skill(s), skipped 0.'
-
-echo '== --all is an alias for -a =='
-seed_skill "$agent/skills" only-one
-bash "$script" -ap "$agent" --all
-if [ -n "$(ls -A "$agent/skills")" ]; then
-  echo 'expected --all to remove every skill folder' >&2
-  exit 1
-fi
-
-echo '== -a on an empty skills dir exits 0 =='
-out=$(bash "$script" -ap "$agent" -a 2>&1)
-printf '%s\n' "$out" | grep -Fq 'Deleted 0 skill(s), skipped 0.'
-
-echo '== -a and -n are mutually exclusive =='
-seed_skill "$agent/skills" untouched
-if bash "$script" -ap "$agent" -a -n untouched; then
-  echo 'expected -a with -n to fail' >&2
-  exit 1
-fi
-if [ ! -d "$agent/skills/untouched" ]; then
-  echo 'expected no deletions when -a and -n are combined' >&2
-  exit 1
-fi
-
 echo '== help option prints usage =='
 help_output=$(bash "$script" -h)
-printf '%s\n' "$help_output" | grep -Fq 'Usage: delete-test-skills.sh'
+printf '%s\n' "$help_output" | grep -Fq 'Usage: delete-builtin-skills.sh'
 
 echo 'all checks passed'

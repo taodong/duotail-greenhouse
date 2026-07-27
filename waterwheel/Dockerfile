@@ -252,6 +252,7 @@ COPY files/scripts/upload-test-task.sh /usr/local/bin/upload-test-task
 COPY files/scripts/load-test-skills.sh /usr/local/bin/load-test-skills
 COPY files/scripts/display-test-skills.sh /usr/local/bin/display-test-skills
 COPY files/scripts/delete-test-skills.sh /usr/local/bin/delete-test-skills
+COPY files/scripts/delete-builtin-skills.sh /usr/local/bin/delete-builtin-skills
 COPY files/scripts/enable-test-on-host.sh /usr/local/bin/enable-test-on-host
 COPY files/scripts/output-context-variables.sh /usr/local/bin/output-context-variables
 COPY files/scripts/customize-playwright-config.sh /usr/local/bin/customize-playwright-config
@@ -280,6 +281,7 @@ RUN chown root:root /usr/local/bin/playwright-mcp \
                    /usr/local/bin/load-test-skills \
                    /usr/local/bin/display-test-skills \
                    /usr/local/bin/delete-test-skills \
+                   /usr/local/bin/delete-builtin-skills \
                    /usr/local/bin/enable-test-on-host \
                    /usr/local/bin/output-context-variables \
                    /usr/local/bin/customize-playwright-config && \
@@ -307,6 +309,7 @@ RUN chown root:root /usr/local/bin/playwright-mcp \
               /usr/local/bin/load-test-skills \
               /usr/local/bin/display-test-skills \
               /usr/local/bin/delete-test-skills \
+              /usr/local/bin/delete-builtin-skills \
               /usr/local/bin/enable-test-on-host \
               /usr/local/bin/output-context-variables \
               /usr/local/bin/customize-playwright-config
