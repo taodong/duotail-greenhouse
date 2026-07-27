@@ -117,8 +117,8 @@ reset_instructions() {
 # Resetting instructions deletes extra-instructions.md, which backs the entire
 # extra-instructions array (host-testing, gemma, ...) in the status file. Strip
 # that array so the status file does not advertise stale enabled features.
-# Other keys (provider-mode, system-prompt) are preserved because their backing
-# files live outside the instructions directory.
+# Other keys (provider-mode) are preserved because their backing files live
+# outside the instructions directory.
 clear_extra_instructions_status() {
   if [[ ! -f "$STATUS_FILE" ]]; then
     return 0

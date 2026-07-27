@@ -97,7 +97,7 @@ Files mounted at `/agent/instructions/` control agent behavior:
 - **`allowed-domains.yaml`** — Playwright domain allowlist; agent cannot navigate outside these origins
 - **`email-permissions.yaml`** — Controls sender/recipient allowlist for email MCP
 - **`extra-instructions.md`** — Injected into every test run (used for URL rewriting: `localhost` → `host.docker.internal`)
-- **`system-prompt-cn.md`** / test instruction `.md` files — Agent instructions / test cases
+- **`system-prompt.md`** / test instruction `.md` files — Agent instructions / test cases
 
 The `waterwheel/files/bootstrap/` directory contains example/default versions of all these files.
 

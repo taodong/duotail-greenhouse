@@ -201,8 +201,6 @@ RUN mkdir -p /config-helpers && \
     chmod 550 /config-helpers
 COPY --chown=root:root files/bootstrap/extra-local.md /config-helpers/extra-local.md
 COPY --chown=root:root files/bootstrap/extra-gemma.md /config-helpers/extra-gemma.md
-COPY --chown=root:root files/bootstrap/system-prompt-cn.md /config-helpers/system-prompt-cn.md
-COPY --chown=root:root files/bootstrap/system-prompt-default.md /config-helpers/system-prompt-default.md
 COPY --chown=root:root files/bootstrap/modes/ /config-helpers/modes/
 COPY --chown=root:root files/bootstrap/default-agent-config.json /config-helpers/default-agent-config.json
 COPY --chown=root:root files/bootstrap/playwright-mcp-config-default.json /config-helpers/playwright-mcp-config-default.json

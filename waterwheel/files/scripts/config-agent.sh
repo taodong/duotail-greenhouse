@@ -28,9 +28,6 @@ EXTRA_INSTRUCTION_FILE="${AGENT_PATH}/instructions/extra-instructions.md"
 EXTRA_LOCAL_FILE="${CONFIG_HELPERS_PATH}/extra-local.md"
 EXTRA_GEMMA_FILE="${CONFIG_HELPERS_PATH}/extra-gemma.md"
 STATUS_FILE="${CONFIG_HELPERS_PATH}/agent-config-status.yaml"
-SYSTEM_PROMPT_FILE="${AGENT_PATH}/config/system.prompt.md"
-SYSTEM_PROMPT_CN="${CONFIG_HELPERS_PATH}/system-prompt-cn.md"
-SYSTEM_PROMPT_DEFAULT="${CONFIG_HELPERS_PATH}/system-prompt-default.md"
 AGENT_CONFIG_FILE="${AGENT_PATH}/config/agent-config.json"
 DEFAULT_AGENT_CONFIG_FILE="${CONFIG_HELPERS_PATH}/default-agent-config.json"
 MODES_DIR="${CONFIG_HELPERS_PATH}/modes"
@@ -213,65 +210,6 @@ disable_gemma_extra() {
   status_remove_entry "gemma"
 }
 
-# ── system prompt ────────────────────────────────────────────────────────────
-
-is_cn_prompt_enabled() {
-  [[ -f "$STATUS_FILE" ]] && grep -qE "^system-prompt: cn" "$STATUS_FILE"
-}
-
-status_set_system_prompt() {
-  local value="$1"
-  if [[ ! -f "$STATUS_FILE" ]]; then
-    printf "system-prompt: %s\n" "$value" > "$STATUS_FILE"
-    return 0
-  fi
-  local tmp
-  tmp="$(mktemp)"
-  if grep -qE "^system-prompt:" "$STATUS_FILE"; then
-    sed "s|^system-prompt:.*|system-prompt: ${value}|" "$STATUS_FILE" > "$tmp"
-  else
-    cat "$STATUS_FILE" > "$tmp"
-    echo "system-prompt: ${value}" >> "$tmp"
-  fi
-  mv "$tmp" "$STATUS_FILE"
-}
-
-status_clear_system_prompt() {
-  if [[ ! -f "$STATUS_FILE" ]]; then
-    return 0
-  fi
-  local tmp
-  tmp="$(mktemp)"
-  grep -vE "^system-prompt:" "$STATUS_FILE" > "$tmp"
-  mv "$tmp" "$STATUS_FILE"
-}
-
-enable_cn_prompt() {
-  if [[ ! -f "$SYSTEM_PROMPT_CN" ]]; then
-    echo "  Error: $SYSTEM_PROMPT_CN not found."
-    return 1
-  fi
-  if [[ ! -f "$SYSTEM_PROMPT_FILE" ]]; then
-    echo "  Warning: $SYSTEM_PROMPT_FILE not found. Cannot set Chinese prompt."
-    return 1
-  fi
-  cat "$SYSTEM_PROMPT_CN" > "$SYSTEM_PROMPT_FILE"
-  status_set_system_prompt "cn"
-  echo "  Chinese system prompt enabled."
-}
-
-disable_cn_prompt() {
-  if [[ ! -f "$SYSTEM_PROMPT_DEFAULT" ]]; then
-    echo "  Warning: $SYSTEM_PROMPT_DEFAULT not found. Cannot restore default prompt."
-    return 1
-  fi
-  if [[ -f "$SYSTEM_PROMPT_FILE" ]]; then
-    cat "$SYSTEM_PROMPT_DEFAULT" > "$SYSTEM_PROMPT_FILE"
-  fi
-  status_clear_system_prompt
-  echo "  Default system prompt restored."
-}
-
 # ── ai mode config ────────────────────────────────────────────────────────────
 
 config_ai_mode() {
@@ -381,9 +319,6 @@ config_ai_mode() {
         if is_gemma_extra_enabled; then
           disable_gemma_extra
         fi
-        if is_cn_prompt_enabled; then
-          disable_cn_prompt
-        fi
         status_set_provider_mode "manual"
         echo "  Mode set to: Manual customized"
         [[ "$is_initial" == true ]] && return 0
@@ -451,24 +386,6 @@ config_ai_mode() {
 
         if [[ "$is_gemma" == true ]]; then
           enable_gemma_extra
-        fi
-
-        local is_deepseek=false
-        if grep -q "^AI_PROVIDER=deepseek" "$selected_file"; then
-          is_deepseek=true
-        fi
-
-        if [[ "$is_deepseek" == true ]]; then
-          echo ""
-          printf "  Use Chinese system prompt? [y/N]: "
-          read -r cn_choice
-          if [[ "$cn_choice" =~ ^[Yy]$ ]]; then
-            enable_cn_prompt
-          elif is_cn_prompt_enabled; then
-            disable_cn_prompt
-          fi
-        elif is_cn_prompt_enabled; then
-          disable_cn_prompt
         fi
 
         echo ""

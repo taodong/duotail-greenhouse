@@ -488,7 +488,6 @@ config-ai-provider --provider <provider> --model <model> --mode <default|efficie
 - Uses the same mode-file update flow as `config-agent` option `1`.
 - Respects provider locking: once a provider is configured, switching to a different provider requires a new container.
 - Does **not** prompt for Gemma `AI_BASE_URL`.
-- Does **not** enable the DeepSeek Chinese system prompt.
 - Does **not** append Gemma extra instructions.
 
 ### Examples
@@ -582,7 +581,7 @@ reset-test-config [-ap <agent-path>] [-cp <config-helpers-path>] [-t] [-i]
 ### Behavior
 - When neither `-t` nor `-i` is provided, **both** operations are performed.
 - `email-permissions.yaml` is always preserved when resetting instructions.
-- Resetting instructions also clears the `extra-instructions` entries (such as `host-testing`) from the agent config status file, since the `extra-instructions.md` file that backs them is deleted. Other status keys (`provider-mode`, `system-prompt`) are preserved, and the status file is removed entirely if nothing else remains. This keeps host-testing state consistent — without it, `config-agent` would still report host testing as enabled after a reset.
+- Resetting instructions also clears the `extra-instructions` entries (such as `host-testing`) from the agent config status file, since the `extra-instructions.md` file that backs them is deleted. Other status keys (`provider-mode`) are preserved, and the status file is removed entirely if nothing else remains. This keeps host-testing state consistent — without it, `config-agent` would still report host testing as enabled after a reset.
 - Missing directories are reported but do not cause an error.
 
 ### Examples
