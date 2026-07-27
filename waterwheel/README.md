@@ -835,23 +835,23 @@ display-test-skills -ap /agent -s login-flow
 
 ## delete-test-skills Usage
 
-`delete-test-skills` removes skill folders that were loaded via `load-test-skills`. It either deletes a comma-delimited list of skill names (`-names`) or clears every user-defined skill (`-a`), removing each matching folder under the skills directory. The skills directory is `$SKILLS_DIR` when set, otherwise `$AGENT_PATH/skills`. Only user-loaded skills are affected — built-in skills under `$AGENT_PATH/builtin-skills` are never touched.
+`delete-test-skills` removes skill folders that were loaded via `load-test-skills`. It either deletes a comma-delimited list of skill names (`-n`) or clears every user-defined skill (`-a`), removing each matching folder under the skills directory. The skills directory is `$SKILLS_DIR` when set, otherwise `$AGENT_PATH/skills`. Only user-loaded skills are affected — built-in skills under `$AGENT_PATH/builtin-skills` are never touched.
 
 ```bash
-delete-test-skills [-ap <agent-path>] -names <name1,name2,...>
+delete-test-skills [-ap <agent-path>] -n <name1,name2,...>
 delete-test-skills [-ap <agent-path>] -a
 ```
 
 ### Options
 | Option | Description |
 | --- | --- |
-| `-names`, `--names <names>` | Comma-delimited skill folder names to delete |
-| `-a`, `--all` | Delete all user-defined skills under the skills directory (mutually exclusive with `-names`) |
+| `-n`, `--names <names>` | Comma-delimited skill folder names to delete |
+| `-a`, `--all` | Delete all user-defined skills under the skills directory (mutually exclusive with `-n`) |
 | `-ap <path>` | Override the agent path (default: `/agent`) |
 | `-h`, `--help`, `h`, `help` | Show usage help |
 
 ### Behavior
-- Exactly one of `-names` or `-a` is required; supplying both exits non-zero.
+- Exactly one of `-n` or `-a` is required; supplying both exits non-zero.
 - With `-a`, every immediate subfolder of the skills directory is deleted; if the directory is missing or empty, the command still exits `0`.
 - Each name is trimmed of surrounding whitespace, so `-names 'a, b'` works as expected.
 - A matching folder `<skills-dir>/<name>` is removed recursively; a name with no matching folder is reported and skipped (the command still exits `0`).
@@ -862,16 +862,54 @@ delete-test-skills [-ap <agent-path>] -a
 ### Examples
 ```bash
 # Delete a single skill
-delete-test-skills -names login-flow
+delete-test-skills -n login-flow
 
 # Delete several skills at once
-delete-test-skills -names login-flow,checkout-flow
+delete-test-skills -n login-flow,checkout-flow
 
 # Delete all user-defined skills
 delete-test-skills -a
 
 # Use a custom skills directory
-SKILLS_DIR=/tmp/skills delete-test-skills -names login-flow
+SKILLS_DIR=/tmp/skills delete-test-skills -n login-flow
+```
+
+---
+
+## delete-builtin-skills Usage
+
+`delete-builtin-skills` removes built-in skill folders that ship with the image, under `$AGENT_PATH/builtin-skills`. It deletes a comma-delimited list of skill names (`-n`), removing each exactly-matched folder. Unlike `delete-test-skills`, there is **no `-a`/`--all` option** — built-in skills can only be removed by exact name. A leading `ww:` prefix on a name is ignored, so `ww:foo` targets the folder `foo`.
+
+```bash
+delete-builtin-skills [-ap <agent-path>] -n <name1,name2,...>
+```
+
+### Options
+| Option | Description |
+| --- | --- |
+| `-n`, `--names <names>` | Comma-delimited built-in skill folder names to delete |
+| `-ap <path>` | Override the agent path (default: `/agent`) |
+| `-h`, `--help`, `h`, `help` | Show usage help |
+
+### Behavior
+- `-n` is required; there is no bulk-delete option.
+- Built-in skills live at `$AGENT_PATH/builtin-skills` (this location is not configurable via `$SKILLS_DIR`).
+- A leading `ww:` prefix is stripped from each name before matching, so `ww:foo` and `foo` are equivalent.
+- Each name is trimmed of surrounding whitespace, so `-n 'a, b'` works as expected.
+- A matching folder `<builtin-skills>/<name>` is removed recursively; a name with no matching folder is reported and skipped (the command still exits `0`).
+- Any name containing a path separator (or `.`/`..`, evaluated after the `ww:` prefix is stripped) is rejected and the command exits non-zero before deleting anything further.
+- On completion it prints a summary of how many skills were deleted and skipped.
+
+### Examples
+```bash
+# Delete a single built-in skill
+delete-builtin-skills -n login-flow
+
+# Delete several built-in skills at once
+delete-builtin-skills -n login-flow,checkout-flow
+
+# A "ww:" prefix targets the unprefixed skill name
+delete-builtin-skills -n ww:login-flow
 ```
 
 ---

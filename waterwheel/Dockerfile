@@ -105,7 +105,8 @@ RUN mkdir -p /agent/instructions /agent/tasks /agent/skills /agent/outputs /agen
     chown root:agentgroup /agent/instructions /agent/tasks /agent/skills && \
     chmod 2550 /agent/instructions /agent/tasks /agent/skills && \
     chown agentuser:agentgroup /agent/outputs /agent/bin && \
-    chmod 770 /agent/outputs /agent/bin
+    chmod 770 /agent/bin && \
+    chmod 2770 /agent/outputs
 
 
 # =============================================================================
@@ -220,8 +221,13 @@ COPY --from=agent-builder --chown=root:root /config-helpers /config-helpers
 # agentgroup, with the setgid bit so files dropped in by the (root) manager
 # scripts inherit agentgroup and stay readable by agentuser. COPY --chown above
 # resets ownership and may not preserve the setgid mode bit, so set it here.
+# /agent/outputs is agentuser-owned but also setgid: the (root) Playwright MCP
+# writes screenshots/artifacts here, and the setgid bit keeps them in agentgroup
+# so agentuser can read them and move them into an outputs/screenshots subfolder.
 RUN chown root:agentgroup /agent/instructions /agent/tasks /agent/skills && \
-    chmod 2550 /agent/instructions /agent/tasks /agent/skills
+    chmod 2550 /agent/instructions /agent/tasks /agent/skills && \
+    chown agentuser:agentgroup /agent/outputs && \
+    chmod 2770 /agent/outputs
 
 # -----------------------------------------------------------------------------
 # 6. MANAGER SCRIPTS
@@ -252,6 +258,8 @@ COPY files/scripts/upload-test-task.sh /usr/local/bin/upload-test-task
 COPY files/scripts/load-test-skills.sh /usr/local/bin/load-test-skills
 COPY files/scripts/display-test-skills.sh /usr/local/bin/display-test-skills
 COPY files/scripts/delete-test-skills.sh /usr/local/bin/delete-test-skills
+COPY files/scripts/delete-builtin-skills.sh /usr/local/bin/delete-builtin-skills
+COPY files/scripts/skill-delete-lib.sh /usr/local/bin/skill-delete-lib
 COPY files/scripts/enable-test-on-host.sh /usr/local/bin/enable-test-on-host
 COPY files/scripts/output-context-variables.sh /usr/local/bin/output-context-variables
 COPY files/scripts/customize-playwright-config.sh /usr/local/bin/customize-playwright-config
@@ -280,6 +288,8 @@ RUN chown root:root /usr/local/bin/playwright-mcp \
                    /usr/local/bin/load-test-skills \
                    /usr/local/bin/display-test-skills \
                    /usr/local/bin/delete-test-skills \
+                   /usr/local/bin/delete-builtin-skills \
+                   /usr/local/bin/skill-delete-lib \
                    /usr/local/bin/enable-test-on-host \
                    /usr/local/bin/output-context-variables \
                    /usr/local/bin/customize-playwright-config && \
@@ -307,6 +317,8 @@ RUN chown root:root /usr/local/bin/playwright-mcp \
               /usr/local/bin/load-test-skills \
               /usr/local/bin/display-test-skills \
               /usr/local/bin/delete-test-skills \
+              /usr/local/bin/delete-builtin-skills \
+              /usr/local/bin/skill-delete-lib \
               /usr/local/bin/enable-test-on-host \
               /usr/local/bin/output-context-variables \
               /usr/local/bin/customize-playwright-config

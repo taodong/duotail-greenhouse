@@ -11,22 +11,22 @@ DELETE_ALL=false
 
 usage() {
   cat <<EOF
-Usage: $(basename "$0") [-ap <agent-path>] -names <name1,name2,...>
+Usage: $(basename "$0") [-ap <agent-path>] -n <name1,name2,...>
        $(basename "$0") [-ap <agent-path>] -a
 
 Deletes skill folders under <skills-dir>, where <skills-dir> is \$SKILLS_DIR when
 set, otherwise \$AGENT_PATH/skills. Either delete a comma-delimited list of skill
-names (-names) or clear every user-defined skill (-a).
+names (-n) or clear every user-defined skill (-a).
 
 Options:
-  -names, --names <names>    Comma-delimited skill folder names to delete
+  -n, --names <names>        Comma-delimited skill folder names to delete
   -a, --all                  Delete all user-defined skills under <skills-dir>
-                             (mutually exclusive with -names)
+                             (mutually exclusive with -n)
   -ap, --agent-path <path>   Override agent path (default: /agent)
   -h, --help, h, help        Show this help message
 
 Notes:
-  - Exactly one of -names or -a is required.
+  - Exactly one of -n or -a is required.
   - Only user-installed skills under <skills-dir> are removed; built-in skills
     are never touched.
   - \$SKILLS_DIR overrides the default \$AGENT_PATH/skills location.
@@ -34,10 +34,10 @@ Notes:
   - Path separators and traversal (e.g. ".", "..", "a/b") are rejected.
 
 Examples:
-  $(basename "$0") -names login-flow
-  $(basename "$0") -names login-flow,checkout-flow
+  $(basename "$0") -n login-flow
+  $(basename "$0") -n login-flow,checkout-flow
   $(basename "$0") -a
-  SKILLS_DIR=/tmp/skills $(basename "$0") -names login-flow
+  SKILLS_DIR=/tmp/skills $(basename "$0") -n login-flow
 EOF
 }
 
@@ -47,7 +47,7 @@ while [[ $# -gt 0 ]]; do
       AGENT_PATH="${2:?--agent-path requires a value}"
       shift 2
       ;;
-    -names|--names)
+    -n|--names)
       SKILL_NAMES="${2:?--names requires a value}"
       shift 2
       ;;
@@ -89,16 +89,24 @@ while [[ $# -gt 0 ]]; do
 done
 
 if [[ "$DELETE_ALL" == true && -n "$SKILL_NAMES" ]]; then
-  echo "Error: -a/--all cannot be combined with skill names (-names or positional arguments)." >&2
+  echo "Error: -a/--all cannot be combined with skill names (-n or positional arguments)." >&2
   usage >&2
   exit 1
 fi
 
 if [[ "$DELETE_ALL" != true && -z "$SKILL_NAMES" ]]; then
-  echo "Error: one of -names <name1,name2,...> or -a is required." >&2
+  echo "Error: one of -n <name1,name2,...> or -a is required." >&2
   usage >&2
   exit 1
 fi
+
+# Source shared libs co-located with this script (repo scripts/ in dev,
+# /usr/local/bin in the container). The .sh suffix only exists in dev.
+_LIB="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+_path="${_LIB}/skill-delete-lib"
+[ -f "${_path}.sh" ] && _path="${_path}.sh"
+# shellcheck disable=SC1090
+source "${_path}"
 
 SKILLS_ROOT="${SKILLS_DIR:-${AGENT_PATH}/skills}"
 BUILTIN_ROOT="${AGENT_PATH}/builtin-skills"
@@ -106,50 +114,18 @@ if [[ "$SKILLS_ROOT" == "$BUILTIN_ROOT" || "$SKILLS_ROOT" == "$BUILTIN_ROOT/"* ]
   echo "Error: refusing to operate on built-in skills directory: $SKILLS_ROOT" >&2
   exit 1
 fi
-deleted=0
-skipped=0
 
-names=()
+PARSED_SKILL_NAMES=()
 if [[ "$DELETE_ALL" == true ]]; then
   # Collect every user-defined skill folder directly under <skills-dir>.
   if [[ -d "$SKILLS_ROOT" ]]; then
     for folder in "$SKILLS_ROOT"/*/; do
       [[ -d "$folder" ]] || continue
-      name="$(basename "$folder")"
-      names+=("$name")
+      PARSED_SKILL_NAMES+=("$(basename "$folder")")
     done
   fi
 else
-  # Split the comma-delimited list, trim/validate all names first (fail fast with no partial deletes).
-  IFS=',' read -r -a _raw_names <<< "$SKILL_NAMES"
-
-  for raw in "${_raw_names[@]}"; do
-    # Trim surrounding whitespace so "a, b" works as expected.
-    name="${raw#"${raw%%[![:space:]]*}"}"
-    name="${name%"${name##*[![:space:]]}"}"
-
-    [[ -z "$name" ]] && continue
-
-    # Reject path separators and traversal so the name stays a single folder.
-    if [[ "$name" == */* || "$name" == "." || "$name" == ".." ]]; then
-      echo "Error: invalid skill name (no path separators allowed): $name" >&2
-      exit 1
-    fi
-
-    names+=("$name")
-  done
+  parse_skill_names "$SKILL_NAMES"
 fi
 
-for name in "${names[@]+"${names[@]}"}"; do
-  folder="${SKILLS_ROOT}/${name}"
-  if [[ -d "$folder" ]]; then
-    rm -rf -- "$folder"
-    echo "Deleted skill: $name"
-    deleted=$((deleted + 1))
-  else
-    echo "No matching skill folder: $name" >&2
-    skipped=$((skipped + 1))
-  fi
-done
-
-echo "Done. Deleted ${deleted} skill(s), skipped ${skipped}."
+delete_skill_folders "$SKILLS_ROOT" "${PARSED_SKILL_NAMES[@]+"${PARSED_SKILL_NAMES[@]}"}"
