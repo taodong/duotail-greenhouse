@@ -31,6 +31,21 @@ if printf '%s\n' "$list_output" | grep -Fq 'gamma (built-in)'; then
   exit 1
 fi
 
+echo '== SKILLS_DIR overrides the user skills location =='
+mkdir -p "$tmpdir/customskills/delta"
+printf '# Delta\nuser delta content\n' > "$tmpdir/customskills/delta/SKILL.md"
+custom_list=$(SKILLS_DIR="$tmpdir/customskills" bash "$script" -ap "$agent")
+if ! printf '%s\n' "$custom_list" | grep -Eq '^delta$'; then
+  echo 'expected SKILLS_DIR user skill delta to be listed' >&2
+  exit 1
+fi
+if printf '%s\n' "$custom_list" | grep -Eq '^gamma$'; then
+  echo 'expected default skills dir to be ignored when SKILLS_DIR is set' >&2
+  exit 1
+fi
+custom_show=$(SKILLS_DIR="$tmpdir/customskills" bash "$script" -ap "$agent" --show delta)
+printf '%s\n' "$custom_show" | grep -Fq 'user delta content'
+
 echo '== --show prints a built-in SKILL.md =='
 show_builtin=$(bash "$script" -ap "$agent" --show alpha)
 printf '%s\n' "$show_builtin" | grep -Fq 'builtin alpha content'

@@ -42,11 +42,11 @@ fi
 printf '%s\n' "$out" | grep -Fq 'No matching skill folder: missing'
 printf '%s\n' "$out" | grep -Fq 'Deleted 2 skill(s), skipped 1.'
 
-echo '== SKILL_DIR overrides the default skills location =='
+echo '== SKILLS_DIR overrides the default skills location =='
 seed_skill "$tmpdir/customskills" foo
-SKILL_DIR="$tmpdir/customskills" bash "$script" -names foo
+SKILLS_DIR="$tmpdir/customskills" bash "$script" -names foo
 if [ -d "$tmpdir/customskills/foo" ]; then
-  echo 'expected SKILL_DIR to be honored' >&2
+  echo 'expected SKILLS_DIR to be honored' >&2
   exit 1
 fi
 

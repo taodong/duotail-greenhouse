@@ -111,6 +111,12 @@
       "name": "MAXIMUM_RESTRICTED_TOOL_USAGE",
       "description": "Maximum number of restricted tool calls allowed without a successful verification or context update before the task is failed; 0 or negative values disable the guard",
       "default": "3"
+    },
+    {
+      "name": "SKILLS_DIR",
+      "description": "Directory of user <skill-name>/SKILL.md skill folders; ignored if it does not exist. Built-in skills live in ./builtin-skills and are not configurable.",
+      "default": "./skills",
+      "file": true
     }
   ],
   "restricted-tools": ["browser_run_code_unsafe"],

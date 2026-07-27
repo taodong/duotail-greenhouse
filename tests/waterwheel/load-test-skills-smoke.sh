@@ -55,10 +55,10 @@ if ! grep -Fq '# Login flow v3' "$target"; then
   exit 1
 fi
 
-echo '== SKILL_DIR overrides the default skills location =='
-printf '# other\n' | SKILL_DIR="$tmpdir/customskills" bash "$script" -name foo
+echo '== SKILLS_DIR overrides the default skills location =='
+printf '# other\n' | SKILLS_DIR="$tmpdir/customskills" bash "$script" -name foo
 if [ ! -f "$tmpdir/customskills/foo/SKILL.md" ]; then
-  echo 'expected SKILL_DIR to be honored' >&2
+  echo 'expected SKILLS_DIR to be honored' >&2
   exit 1
 fi
 
