@@ -1,11 +1,11 @@
 #!/usr/bin/env bash
 # Location: /usr/local/bin/load-test-skills
-# Description: Creates a skill folder under $AGENT_PATH/skills (or $SKILL_DIR)
+# Description: Creates a skill folder under $AGENT_PATH/skills (or $SKILLS_DIR)
 #              named <skill-name> and writes stdin content to its SKILL.md.
 set -euo pipefail
 
 AGENT_PATH="${AGENT_PATH:-/agent}"
-SKILL_DIR="${SKILL_DIR:-}"
+SKILLS_DIR="${SKILLS_DIR:-}"
 SKILL_NAME=""
 FORCE=false
 
@@ -14,7 +14,7 @@ usage() {
 Usage: $(basename "$0") [-ap <agent-path>] -name <skill-name> [--force]
 
 Reads content from stdin and writes it to <skills-dir>/<skill-name>/SKILL.md,
-where <skills-dir> is \$SKILL_DIR when set, otherwise \$AGENT_PATH/skills.
+where <skills-dir> is \$SKILLS_DIR when set, otherwise \$AGENT_PATH/skills.
 
 For an existing skill folder the write is skipped unless --force is given.
 
@@ -26,14 +26,14 @@ Options:
 
 Notes:
   - The skill folder is <skills-dir>/<skill-name>; SKILL.md is written inside it.
-  - \$SKILL_DIR overrides the default \$AGENT_PATH/skills location.
+  - \$SKILLS_DIR overrides the default \$AGENT_PATH/skills location.
   - Missing parent directories are created automatically.
   - An existing skill folder is skipped unless --force is provided.
 
 Examples:
   cat ./SKILL.md | $(basename "$0") -name login-flow
   cat ./SKILL.md | $(basename "$0") -name login-flow --force
-  cat ./SKILL.md | SKILL_DIR=/tmp/skills $(basename "$0") -name login-flow
+  cat ./SKILL.md | SKILLS_DIR=/tmp/skills $(basename "$0") -name login-flow
 EOF
 }
 
@@ -96,7 +96,7 @@ if [[ "$SKILL_NAME" == */* || "$SKILL_NAME" == "." || "$SKILL_NAME" == ".." ]]; 
   exit 1
 fi
 
-SKILLS_ROOT="${SKILL_DIR:-${AGENT_PATH}/skills}"
+SKILLS_ROOT="${SKILLS_DIR:-${AGENT_PATH}/skills}"
 SKILL_FOLDER="${SKILLS_ROOT}/${SKILL_NAME}"
 TARGET_FILE="${SKILL_FOLDER}/SKILL.md"
 

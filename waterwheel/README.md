@@ -762,7 +762,7 @@ cat ./signup.md | upload-test-task -ap /tmp/my-agent signup.md
 
 ## load-test-skills Usage
 
-`load-test-skills` creates a skill folder under the skills directory and writes stdin content to a `SKILL.md` inside it. The skills directory is `$SKILL_DIR` when set, otherwise `$AGENT_PATH/skills`; the `-name <skill-name>` argument becomes the folder name and the target file is `<skills-dir>/<skill-name>/SKILL.md` (written via `file-upload-lib`). By default an existing skill folder is left untouched; pass `--force`/`-f` to overwrite its `SKILL.md`.
+`load-test-skills` creates a skill folder under the skills directory and writes stdin content to a `SKILL.md` inside it. The skills directory is `$SKILLS_DIR` when set, otherwise `$AGENT_PATH/skills`; the `-name <skill-name>` argument becomes the folder name and the target file is `<skills-dir>/<skill-name>/SKILL.md` (written via `file-upload-lib`). By default an existing skill folder is left untouched; pass `--force`/`-f` to overwrite its `SKILL.md`.
 
 ```bash
 load-test-skills [-ap <agent-path>] -name <skill-name> [--force]
@@ -778,7 +778,7 @@ load-test-skills [-ap <agent-path>] -name <skill-name> [--force]
 
 ### Behavior
 - Content is read from stdin and written to `<skills-dir>/<skill-name>/SKILL.md`.
-- `$SKILL_DIR` overrides the default `$AGENT_PATH/skills` location.
+- `$SKILLS_DIR` overrides the default `$AGENT_PATH/skills` location.
 - A skill name containing a path separator (or `.`/`..`) is rejected so it stays a single folder.
 - An existing skill folder is skipped (stdin is drained, exit `0`) unless `--force` is given.
 - Missing parent directories are created automatically.
@@ -793,14 +793,14 @@ cat ./SKILL.md | load-test-skills -name login-flow
 cat ./SKILL.md | load-test-skills -name login-flow --force
 
 # Use a custom skills directory
-cat ./SKILL.md | SKILL_DIR=/tmp/skills load-test-skills -name login-flow
+cat ./SKILL.md | SKILLS_DIR=/tmp/skills load-test-skills -name login-flow
 ```
 
 ---
 
 ## display-test-skills Usage
 
-`display-test-skills` lists installed skills, or prints a single skill's `SKILL.md`. Skills are read from two locations: `$AGENT_PATH/builtin-skills` (shipped with the image) and `$AGENT_PATH/skills` (loaded via `load-test-skills`). Without arguments it lists every skill in both, tagging built-in skills with `(built-in)`. With `--show <skill-name>` it prints that skill's `SKILL.md`, preferring a user skill over a built-in one of the same name, and prints `No skill is matched.` when neither exists.
+`display-test-skills` lists installed skills, or prints a single skill's `SKILL.md`. Skills are read from two locations: `$AGENT_PATH/builtin-skills` (shipped with the image) and the user skills directory — `$SKILLS_DIR` when set, otherwise `$AGENT_PATH/skills` (loaded via `load-test-skills`). Without arguments it lists every skill in both, tagging built-in skills with `(built-in)`. With `--show <skill-name>` it prints that skill's `SKILL.md`, preferring a user skill over a built-in one of the same name, and prints `No skill is matched.` when neither exists.
 
 ```bash
 display-test-skills [-ap <agent-path>] [--show|-s <skill-name>]
@@ -814,8 +814,9 @@ display-test-skills [-ap <agent-path>] [--show|-s <skill-name>]
 | `-h`, `--help`, `h`, `help` | Show usage help |
 
 ### Behavior
-- List mode enumerates skill folders under `builtin-skills/` (marked `(built-in)`) then `skills/`; if neither has any, it prints `No skills installed.`.
-- Show mode looks up `skills/<name>/SKILL.md` first, then `builtin-skills/<name>/SKILL.md`, so a user skill shadows a built-in of the same name.
+- List mode enumerates skill folders under `builtin-skills/` (marked `(built-in)`) then the user skills directory; if neither has any, it prints `No skills installed.`.
+- Show mode looks up `<skills-dir>/<name>/SKILL.md` first, then `builtin-skills/<name>/SKILL.md`, so a user skill shadows a built-in of the same name.
+- `$SKILLS_DIR` overrides the default `$AGENT_PATH/skills` location for the user skills directory.
 - A skill name containing a path separator (or `.`/`..`) is rejected.
 - When the named skill is not found in either location, it prints `No skill is matched.` and exits `0`.
 
@@ -835,7 +836,7 @@ display-test-skills -ap /agent -s login-flow
 
 ## delete-test-skills Usage
 
-`delete-test-skills` removes skill folders that were loaded via `load-test-skills`. It either deletes a comma-delimited list of skill names (`-names`) or clears every user-defined skill (`-a`), removing each matching folder under the skills directory. The skills directory is `$SKILL_DIR` when set, otherwise `$AGENT_PATH/skills`. Only user-loaded skills are affected — built-in skills under `$AGENT_PATH/builtin-skills` are never touched.
+`delete-test-skills` removes skill folders that were loaded via `load-test-skills`. It either deletes a comma-delimited list of skill names (`-names`) or clears every user-defined skill (`-a`), removing each matching folder under the skills directory. The skills directory is `$SKILLS_DIR` when set, otherwise `$AGENT_PATH/skills`. Only user-loaded skills are affected — built-in skills under `$AGENT_PATH/builtin-skills` are never touched.
 
 ```bash
 delete-test-skills [-ap <agent-path>] -names <name1,name2,...>
@@ -855,7 +856,7 @@ delete-test-skills [-ap <agent-path>] -a
 - With `-a`, every immediate subfolder of the skills directory is deleted; if the directory is missing or empty, the command still exits `0`.
 - Each name is trimmed of surrounding whitespace, so `-names 'a, b'` works as expected.
 - A matching folder `<skills-dir>/<name>` is removed recursively; a name with no matching folder is reported and skipped (the command still exits `0`).
-- `$SKILL_DIR` overrides the default `$AGENT_PATH/skills` location.
+- `$SKILLS_DIR` overrides the default `$AGENT_PATH/skills` location.
 - Any name containing a path separator (or `.`/`..`) is rejected and the command exits non-zero before deleting anything further.
 - On completion it prints a summary of how many skills were deleted and skipped.
 
@@ -871,7 +872,7 @@ delete-test-skills -names login-flow,checkout-flow
 delete-test-skills -a
 
 # Use a custom skills directory
-SKILL_DIR=/tmp/skills delete-test-skills -names login-flow
+SKILLS_DIR=/tmp/skills delete-test-skills -names login-flow
 ```
 
 ---

@@ -1,11 +1,11 @@
 #!/usr/bin/env bash
 # Location: /usr/local/bin/delete-test-skills
-# Description: Deletes skill folders under $AGENT_PATH/skills (or $SKILL_DIR)
+# Description: Deletes skill folders under $AGENT_PATH/skills (or $SKILLS_DIR)
 #              matching a comma-delimited list of skill names.
 set -euo pipefail
 
 AGENT_PATH="${AGENT_PATH:-/agent}"
-SKILL_DIR="${SKILL_DIR:-}"
+SKILLS_DIR="${SKILLS_DIR:-}"
 SKILL_NAMES=""
 DELETE_ALL=false
 
@@ -14,7 +14,7 @@ usage() {
 Usage: $(basename "$0") [-ap <agent-path>] -names <name1,name2,...>
        $(basename "$0") [-ap <agent-path>] -a
 
-Deletes skill folders under <skills-dir>, where <skills-dir> is \$SKILL_DIR when
+Deletes skill folders under <skills-dir>, where <skills-dir> is \$SKILLS_DIR when
 set, otherwise \$AGENT_PATH/skills. Either delete a comma-delimited list of skill
 names (-names) or clear every user-defined skill (-a).
 
@@ -29,7 +29,7 @@ Notes:
   - Exactly one of -names or -a is required.
   - Only user-installed skills under <skills-dir> are removed; built-in skills
     are never touched.
-  - \$SKILL_DIR overrides the default \$AGENT_PATH/skills location.
+  - \$SKILLS_DIR overrides the default \$AGENT_PATH/skills location.
   - Names that do not match an existing folder are reported and skipped.
   - Path separators and traversal (e.g. ".", "..", "a/b") are rejected.
 
@@ -37,7 +37,7 @@ Examples:
   $(basename "$0") -names login-flow
   $(basename "$0") -names login-flow,checkout-flow
   $(basename "$0") -a
-  SKILL_DIR=/tmp/skills $(basename "$0") -names login-flow
+  SKILLS_DIR=/tmp/skills $(basename "$0") -names login-flow
 EOF
 }
 
@@ -100,7 +100,7 @@ if [[ "$DELETE_ALL" != true && -z "$SKILL_NAMES" ]]; then
   exit 1
 fi
 
-SKILLS_ROOT="${SKILL_DIR:-${AGENT_PATH}/skills}"
+SKILLS_ROOT="${SKILLS_DIR:-${AGENT_PATH}/skills}"
 BUILTIN_ROOT="${AGENT_PATH}/builtin-skills"
 if [[ "$SKILLS_ROOT" == "$BUILTIN_ROOT" || "$SKILLS_ROOT" == "$BUILTIN_ROOT/"* ]]; then
   echo "Error: refusing to operate on built-in skills directory: $SKILLS_ROOT" >&2

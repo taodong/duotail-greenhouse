@@ -1,10 +1,12 @@
 #!/usr/bin/env bash
 # Location: /usr/local/bin/display-test-skills
-# Description: Lists skills installed under $AGENT_PATH/builtin-skills and
-#              $AGENT_PATH/skills, or prints a single skill's SKILL.md.
+# Description: Lists skills installed under $AGENT_PATH/builtin-skills and the
+#              user skills dir ($SKILLS_DIR or $AGENT_PATH/skills), or prints a
+#              single skill's SKILL.md.
 set -euo pipefail
 
 AGENT_PATH="${AGENT_PATH:-/agent}"
+SKILLS_DIR="${SKILLS_DIR:-}"
 SHOW_SKILL=""
 
 usage() {
@@ -12,7 +14,8 @@ usage() {
 Usage: $(basename "$0") [-ap <agent-path>] [--show|-s <skill-name>]
 
 Without --show, lists every skill installed under \$AGENT_PATH/builtin-skills
-and \$AGENT_PATH/skills. Built-in skills are marked as such.
+and the user skills dir (\$SKILLS_DIR when set, otherwise \$AGENT_PATH/skills).
+Built-in skills are marked as such.
 
 With --show <skill-name>, prints the content of that skill's SKILL.md if the
 skill exists in either location. Otherwise prints "No skill is matched.".
@@ -57,7 +60,7 @@ while [[ $# -gt 0 ]]; do
 done
 
 BUILTIN_DIR="${AGENT_PATH}/builtin-skills"
-SKILLS_DIR="${AGENT_PATH}/skills"
+SKILLS_DIR="${SKILLS_DIR:-${AGENT_PATH}/skills}"
 
 # --- Show mode: print a single skill's SKILL.md ------------------------------
 if [[ -n "$SHOW_SKILL" ]]; then
