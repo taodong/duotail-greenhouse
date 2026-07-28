@@ -227,7 +227,17 @@ COPY --from=agent-builder --chown=root:root /config-helpers /config-helpers
 RUN chown root:agentgroup /agent/instructions /agent/tasks /agent/skills && \
     chmod 2550 /agent/instructions /agent/tasks /agent/skills && \
     chown agentuser:agentgroup /agent/outputs && \
-    chmod 2770 /agent/outputs
+    chmod 2770 /agent/outputs && \
+    # The (root) Playwright MCP can drop screenshots into /agent itself when the
+    # agent supplies an explicit filename (resolved against the agent's cwd).
+    # Make /agent root-owned, group agentgroup, setgid + group-writable so those
+    # root-created files land in agentgroup and agentuser can move/delete them.
+    chown root:agentgroup /agent && \
+    chmod 2775 /agent && \
+    # Re-own the shipped policy/task files to root so the agent can read but not
+    # rewrite them (the read-only dir bit alone does not protect file contents
+    # of agent-owned files).
+    chown root:agentgroup /agent/instructions/* /agent/tasks/* 2>/dev/null || true
 
 # -----------------------------------------------------------------------------
 # 6. MANAGER SCRIPTS
