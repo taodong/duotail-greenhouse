@@ -80,6 +80,11 @@ if [ -n "$MCP_CONFIG" ]; then
     MCP_ARGS+=(--config "$MCP_CONFIG")
 fi
 
+# Ensure root-created output files (e.g. screenshots the MCP writes into /agent
+# or /agent/outputs) are group-writable so agentuser (in agentgroup) can move,
+# overwrite, and delete them.
+umask 0002
+
 # If FIREWALL_DEBUG=true, we enable Playwright's verbose logging
 MCP_CLI="$(npm root -g)/@playwright/mcp/cli.js"
 

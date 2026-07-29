@@ -1068,7 +1068,7 @@ Use `preset-context` to read and update this file. See [preset-context Usage](#p
 
 | Path                                        | Owner:Group | Mode | `agentuser` access | Notes                                                     |
 |---------------------------------------------| --- | --- | --- |-----------------------------------------------------------|
-| `/agent`                                    | `agentuser:agentgroup` | varies | Mostly read/write in owned tree | Copied with `--chown=agentuser:agentgroup` in `Dockerfile` |
+| `/agent`                                    | `root:agentgroup` | `2775` | Read/write in owned subtrees; can add/move/delete top-level entries via group write | Setgid + group-writable so root-created MCP artifacts land in `agentgroup` and `agentuser` can manage them. When the agent saves a screenshot with an explicit filename, the (root) Playwright MCP resolves it against the agent's cwd (`/agent`) and writes it here; group write + setgid let `agentuser` move it into `/agent/outputs`. Agent code subtrees (`dist/`, `config/`, `node_modules/`) remain `agentuser`-owned. |
 | `/agent/instructions`                       | `root:agentgroup` | `550` | Read + traverse, no write | Policy/config files are read-only at runtime; files written by the manager scripts are set to `640` (see `agent-file-perms-lib`) |
 | `/agent/tasks`                              | `root:agentgroup` | `550` | Read + traverse, no write | Task input files are read-only at runtime; files written by the manager scripts are set to `640` (see `agent-file-perms-lib`) |
 | `/agent/outputs`                            | `agentuser:agentgroup` | `770` | Full rwx | Agent writes logs and output artifacts here               |
