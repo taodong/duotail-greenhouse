@@ -62,7 +62,7 @@ RUN npm install -g npm@${NPM_VERSION}
 # -----------------------------------------------------------------------------
     # 3. Install Playwright MCP
 # -----------------------------------------------------------------------------
-ARG PLAYWRIGHT_MCP_VERSION=0.0.75
+ARG PLAYWRIGHT_MCP_VERSION=0.0.79
 ENV PLAYWRIGHT_MCP_VERSION=${PLAYWRIGHT_MCP_VERSION}
 RUN npm install -g @playwright/mcp@${PLAYWRIGHT_MCP_VERSION}
 
@@ -82,7 +82,7 @@ ENV ENABLE_PLAYWRIGHT_MCP=true
 # -----------------------------------------------------------------------------
 # 4. Install Email Sending MCP
 # -----------------------------------------------------------------------------
-ARG EMAIL_MCP_VERSION=0.5.1
+ARG EMAIL_MCP_VERSION=0.6.0
 ARG EMAIL_MCP_JAR_URL=https://github.com/taodong/duotail-test-sender/releases/download/v${EMAIL_MCP_VERSION}/duotail-test-email-utils-${EMAIL_MCP_VERSION}.jar
 RUN mkdir -p /services/email && chmod 700 /services/email
 RUN mkdir -p /var/log/email-mcp
