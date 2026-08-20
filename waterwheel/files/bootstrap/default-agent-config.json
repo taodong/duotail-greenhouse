@@ -58,6 +58,11 @@
       "default": "120"
     },
     {
+      "name": "TOOL_CALL_TIMEOUT_SEC",
+      "description": "Maximum duration (in seconds) a single MCP tool call may run before it is aborted and reported as a tool error",
+      "default": "180"
+    },
+    {
       "name": "MAX_SNAPSHOTS_HISTORY",
       "description": "Maximum number of recent browser_snapshot tool results to keep in LLM message history; non-positive values are treated as 1",
       "default": "2"
