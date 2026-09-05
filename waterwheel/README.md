@@ -214,7 +214,7 @@ rerun-tests
 
 ## run-qa-lib (internal shared library)
 
-`run-qa-lib` is a shared bash library sourced by `run-qa`, `rerun-tests`, `stop-qa`, `stop-rerun`, `check-test-result`, and `get-failure-detail`. It is not intended to be invoked directly.
+`run-qa-lib` is a shared bash library sourced by `run-qa`, `rerun-tests`, `stop-qa`, `stop-rerun`, `check-test-result`, `get-failure-detail`, and `output-context-variables`. It is not intended to be invoked directly.
 
 It consolidates logic that was previously duplicated across `run-qa` and `stop-qa`:
 

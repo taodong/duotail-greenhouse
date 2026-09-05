@@ -56,11 +56,12 @@ cleanup_lock() {
         terminate_pid_tree "$AGENT_PID"
     fi
 
+    # Only clear the session files if this process actually owns the session.
+    # run-qa and rerun-tests share these paths, so an invocation that bounced
+    # off the lock must leave the running session's files — including the agent
+    # PID file — intact, or stop-qa/stop-rerun lose their handle on the agent.
     if [ -f "$PID_FILE" ] && [ "$(cat "$PID_FILE" 2>/dev/null || true)" = "$$" ]; then
-        rm -f "$PID_FILE" "$MODE_FILE"
-    fi
-    if [ -f "$AGENT_PID_FILE" ]; then
-        rm -f "$AGENT_PID_FILE"
+        rm -f "$PID_FILE" "$MODE_FILE" "$AGENT_PID_FILE"
     fi
 }
 
