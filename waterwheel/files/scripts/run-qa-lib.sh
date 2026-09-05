@@ -5,6 +5,7 @@
 RUN_QA_PID_FILE="/tmp/run-qa.pid"
 RUN_QA_AGENT_PID_FILE="/tmp/run-qa.agent.pid"
 RUN_QA_LOCK_FILE="/tmp/run-qa.lock"
+RUN_QA_MODE_FILE="/tmp/run-qa.mode"
 
 terminate_pid_tree() {
     local TARGET_PID=$1
@@ -42,4 +43,19 @@ is_run_qa_active() {
     fi
     RUN_QA_ACTIVE_PID="$pid"
     return 0
+}
+
+# Echoes the mode of the session currently holding the lock: "run-qa" or
+# "rerun-tests". A missing, empty, or unrecognized marker reads as "run-qa" so
+# that an unidentifiable session is never mistaken for a rerun and terminated
+# by stop-rerun.
+run_qa_session_mode() {
+    local mode=""
+    if [ -f "$RUN_QA_MODE_FILE" ]; then
+        mode="$(cat "$RUN_QA_MODE_FILE" 2>/dev/null || true)"
+    fi
+    case "$mode" in
+        rerun-tests) echo "rerun-tests" ;;
+        *)           echo "run-qa" ;;
+    esac
 }

@@ -67,7 +67,7 @@ docker buildx build \
 
 `run-qa` is the entrypoint script that orchestrates all MCP services and launches the agent.
 
-Only one `run-qa` process can run at a time. If another `run-qa` session is already active, the command exits and asks you to run `stop-qa` first.
+Only one `run-qa` process can run at a time, and it shares that single-instance lock with [`rerun-tests`](#rerun-tests-usage). If another `run-qa` or `rerun-tests` session is already active, the command exits and names the stop command for that session (`stop-qa` or `stop-rerun`).
 
 ```bash
 run-qa [OPTIONS]
@@ -92,9 +92,79 @@ stop-qa
 run-qa
 ```
 
+## rerun-tests Usage
+
+`rerun-tests` replays a chosen subset of tasks through the agent's rerun entry point
+(`dist/rerun-qa.cjs`), seeded from a context checkpoint captured during the most recent full
+`run-qa` run. It brings up the same services as `run-qa` (Xvfb, Playwright MCP, Email MCP).
+
+```bash
+rerun-tests
+```
+
+It takes no options.
+
+### Prerequisites
+
+1. **A completed `run-qa` run.** Every normal run writes a per-task context checkpoint to
+   `/agent/outputs/checkpoints/<taskId>.json`. Those checkpoints are what a rerun seeds from,
+   so a rerun is only meaningful after a full run has produced them.
+2. **A rerun-config file** at `/agent/instructions/rerun-config.json` naming the task files to
+   replay, in execution order. `rerun-tests` exits `1` before starting any service if it is
+   missing.
+
+```bash
+printf '{"flow":[{"file":"test-2.md"},{"file":"test-5.md"}]}' \
+  | upload-instruction-file rerun-config.json
+```
+
+The file also accepts optional `name` and `data` properties (naming the output folder and
+overriding context values respectively). See the "Checkpoint & Rerun" section of the agent
+repo's `README.md` for the full semantics, including how the seed checkpoint is chosen and
+why dependency checking is bypassed.
+
+The config location is resolved from the `RERUN_CONFIG_PATH` agent parameter — process
+environment first, then the `agent-config.json` default, then `./instructions/rerun-config.json`.
+Relative paths resolve against `/agent`.
+
+### Output handling
+
+Unlike `run-qa`, **`rerun-tests` never cleans `/agent/outputs`** — it reads
+`outputs/checkpoints/` and `outputs/test-results.json` from there. Each invocation writes to
+its own `outputs/rerun-<name>/` (or auto-numbered `outputs/rerun-N/`) subfolder and leaves the
+original run's results untouched.
+
+Note that the next `run-qa` *does* clean `/agent/outputs`, clearing both the checkpoints and
+any `outputs/rerun-*` folders. Checkpoints only ever belong to the most recent full run.
+
+### Relationship to run-qa
+
+`rerun-tests` and `run-qa` share one lock and one set of PID files, because both drive the same
+virtual display and the same MCP services. They can never run at the same time. A session mode
+marker (`/tmp/run-qa.mode`) records which of the two is active so each command can name the
+right stop command.
+
+### Examples
+```bash
+# Full run first, to produce checkpoints
+run-qa
+
+# Then replay a subset
+printf '{"name":"login flow","flow":[{"file":"test-2.md"}]}' \
+  | upload-instruction-file rerun-config.json
+rerun-tests
+# results land in /agent/outputs/rerun-login_flow/
+
+# If a previous rerun session is still active, stop it first
+stop-rerun
+rerun-tests
+```
+
 ## stop-qa Usage
 
-`stop-qa` stops the currently tracked `run-qa` process tree, including the launched agent subprocess, if one exists.
+`stop-qa` stops the currently tracked orchestrator process tree, including the launched agent subprocess, if one exists. It is the universal stopper: it stops a `run-qa` session *or* a `rerun-tests` session, whichever is active. It is also the only command that clears a stale lock left by an orphaned process.
+
+To stop only a rerun — and be told to leave a `run-qa` session alone — use [`stop-rerun`](#stop-rerun-usage).
 
 ```bash
 stop-qa
@@ -110,9 +180,41 @@ stop-qa
 run-qa
 ```
 
+## stop-rerun Usage
+
+`stop-rerun` stops an active `rerun-tests` session. It is scoped to reruns on purpose: because
+`run-qa` and `rerun-tests` share one set of PID files, this command consults the session mode
+marker and refuses to terminate a `run-qa` session.
+
+```bash
+stop-rerun
+```
+
+| Situation | Behavior | Exit code |
+| --- | --- | --- |
+| A `rerun-tests` session is active | Stops the agent process tree, then the orchestrator; clears the PID and mode files | `0` |
+| A `run-qa` session is active | Stops nothing; reports the active session and points at `stop-qa` | `1` |
+| Nothing is tracked | Reports that no rerun was found, and points at `stop-qa` for stale-lock recovery | `0` |
+
+A session whose mode marker is missing or unrecognized is treated as `run-qa`, so `stop-rerun`
+never terminates a process tree it cannot positively identify as a rerun.
+
+`stop-rerun` deliberately does **not** duplicate `stop-qa`'s orphaned-lock recovery. An orphaned
+lock with no PID file carries no mode information, so stale-lock recovery lives only in `stop-qa`.
+
+### Examples
+```bash
+# Stop the current rerun session, if any
+stop-rerun
+
+# Restart a rerun from scratch
+stop-rerun
+rerun-tests
+```
+
 ## run-qa-lib (internal shared library)
 
-`run-qa-lib` is a shared bash library sourced by `run-qa`, `stop-qa`, `check-test-result`, and `get-failure-detail`. It is not intended to be invoked directly.
+`run-qa-lib` is a shared bash library sourced by `run-qa`, `rerun-tests`, `stop-qa`, `stop-rerun`, `check-test-result`, and `get-failure-detail`. It is not intended to be invoked directly.
 
 It consolidates logic that was previously duplicated across `run-qa` and `stop-qa`:
 
@@ -120,9 +222,11 @@ It consolidates logic that was previously duplicated across `run-qa` and `stop-q
 | --- | --- |
 | `RUN_QA_PID_FILE` | Path to the orchestrator PID file (`/tmp/run-qa.pid`) |
 | `RUN_QA_AGENT_PID_FILE` | Path to the agent subprocess PID file (`/tmp/run-qa.agent.pid`) |
-| `RUN_QA_LOCK_FILE` | Path to the exclusive lock file (`/tmp/run-qa.lock`) |
+| `RUN_QA_LOCK_FILE` | Path to the exclusive lock file (`/tmp/run-qa.lock`), shared by `run-qa` and `rerun-tests` |
+| `RUN_QA_MODE_FILE` | Path to the session mode marker (`/tmp/run-qa.mode`) |
 | `terminate_pid_tree <pid>` | Recursively terminates a process and all its children |
-| `is_run_qa_active` | Returns `0` if `run-qa` is running, `1` otherwise; sets `$RUN_QA_ACTIVE_PID` |
+| `is_run_qa_active` | Returns `0` if a `run-qa` or `rerun-tests` session is running, `1` otherwise; sets `$RUN_QA_ACTIVE_PID` |
+| `run_qa_session_mode` | Echoes the active session's mode, `run-qa` or `rerun-tests`; a missing or unrecognized marker reads as `run-qa` |
 
 ---
 
@@ -1078,7 +1182,9 @@ Use `preset-context` to read and update this file. See [preset-context Usage](#p
 | `/services/email`                           | `root:root` | `700` | No access | Email MCP service directory, root-only                    |
 | `/services/email/email-mcp.jar`             | `root:root` | default file mode | Not accessible (parent dir `700`) | Email MCP JAR, loaded by service script                   |
 | `/usr/local/bin/run-qa`                     | `root:root` | `700` | Cannot execute | Container entrypoint script                               |
-| `/usr/local/bin/stop-qa`                    | `root:root` | `700` | Cannot execute | Stops the tracked `run-qa` process tree                   |
+| `/usr/local/bin/stop-qa`                    | `root:root` | `700` | Cannot execute | Stops the tracked `run-qa` or `rerun-tests` process tree  |
+| `/usr/local/bin/rerun-tests`                | `root:root` | `700` | Cannot execute | Replays a task subset from a checkpoint                   |
+| `/usr/local/bin/stop-rerun`                 | `root:root` | `700` | Cannot execute | Stops the tracked `rerun-tests` process tree              |
 | `/usr/local/bin/check-test-result`          | `root:root` | `700` | Cannot execute | Prints test results or in-progress status                 |
 | `/usr/local/bin/get-failure-detail`         | `root:root` | `700` | Cannot execute | Prints full diagnostic report for the first failed test   |
 | `/usr/local/bin/output-context-variables`   | `root:root` | `700` | Cannot execute | Prints user-scoped context values from the latest run     |
@@ -1086,7 +1192,7 @@ Use `preset-context` to read and update this file. See [preset-context Usage](#p
 | `/usr/local/bin/email-mcp`                  | `root:root` | `700` | Cannot execute | Email MCP launch script                                   |
 | `/usr/local/bin/config-agent`               | `root:root` | `700` | Cannot execute | Script to quickly config the agent                        |
 | `/usr/local/bin/config-ai-provider`         | `root:root` | `700` | Cannot execute | Non-interactively applies provider/model/mode settings    |
-| `/usr/local/bin/run-qa-lib`                 | `root:root` | `700` | Cannot execute | Shared library sourced by `run-qa`, `stop-qa`, `check-test-result` |
+| `/usr/local/bin/run-qa-lib`                 | `root:root` | `700` | Cannot execute | Shared library sourced by `run-qa`, `rerun-tests`, `stop-qa`, `stop-rerun`, `check-test-result` |
 | `/usr/local/bin/file-upload-lib`            | `root:root` | `700` | Cannot execute | Saves stdin content to a target file path |
 | `/usr/local/bin/agent-file-perms-lib`       | `root:root` | `700` | Cannot execute | Shared library that restricts `tasks/`-`instructions/` files to `640` |
 | `/usr/local/bin/manage-global-constants`    | `root:root` | `700` | Cannot execute | Manages entries in `global-context.json`                  |
@@ -1103,6 +1209,8 @@ Use `preset-context` to read and update this file. See [preset-context Usage](#p
 |----------------------------| --- | --- |----------------------------------------------------------|
 | `run-qa`                   | ✅ | ❌ | `/usr/local/bin/run-qa` (mode `700`)                     |
 | `stop-qa`                  | ✅ | ❌ | `/usr/local/bin/stop-qa` (mode `700`)                    |
+| `rerun-tests`              | ✅ | ❌ | `/usr/local/bin/rerun-tests` (mode `700`)                |
+| `stop-rerun`               | ✅ | ❌ | `/usr/local/bin/stop-rerun` (mode `700`)                 |
 | `check-test-result`        | ✅ | ❌ | `/usr/local/bin/check-test-result` (mode `700`)          |
 | `get-failure-detail`       | ✅ | ❌ | `/usr/local/bin/get-failure-detail` (mode `700`)         |
 | `output-context-variables` | ✅ | ❌ | `/usr/local/bin/output-context-variables` (mode `700`)   |
