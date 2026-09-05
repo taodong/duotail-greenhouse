@@ -56,11 +56,29 @@ run_qa_process_start_time() {
 run_qa_write_session() {
     local mode="$1" agent_pid="${2:--}" agent_start="${3:--}"
     local orch_start tmp
+
+    # Only the lock holder ever writes, so any temp file sitting here is a
+    # leftover from a writer that was killed mid-write and can never be live.
+    rm -f "${RUN_QA_SESSION_FILE}".* 2>/dev/null || true
+
     orch_start="$(run_qa_process_start_time "$$")" || orch_start="-"
     tmp="${RUN_QA_SESSION_FILE}.$$"
-    printf '%s %s %s %s %s\n' \
-        "$mode" "$$" "${orch_start:--}" "${agent_pid:--}" "${agent_start:--}" > "$tmp" || return 1
-    mv -f "$tmp" "$RUN_QA_SESSION_FILE"
+
+    if ! printf '%s %s %s %s %s\n' \
+        "$mode" "$$" "${orch_start:--}" "${agent_pid:--}" "${agent_start:--}" > "$tmp"; then
+        rm -f "$tmp"
+        return 1
+    fi
+    if ! mv -f "$tmp" "$RUN_QA_SESSION_FILE"; then
+        rm -f "$tmp"
+        return 1
+    fi
+}
+
+# Removes the session record along with any temp file left behind by a write
+# that was interrupted before its mv completed.
+run_qa_clear_session() {
+    rm -f "$RUN_QA_SESSION_FILE" "${RUN_QA_SESSION_FILE}".* 2>/dev/null || true
 }
 
 # Records the agent subprocess in the existing record; with no argument (or an

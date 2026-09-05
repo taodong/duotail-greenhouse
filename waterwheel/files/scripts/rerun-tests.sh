@@ -57,7 +57,7 @@ cleanup_lock() {
     # and rerun-tests share one record, so an invocation that bounced off the
     # lock must leave the running session's record intact.
     if run_qa_read_session && [ "$RUN_QA_SESSION_PID" = "$$" ]; then
-        rm -f "$RUN_QA_SESSION_FILE"
+        run_qa_clear_session
     fi
 }
 
@@ -86,7 +86,11 @@ if ! flock -n 200; then
     exit 1
 fi
 
-run_qa_write_session "rerun-tests"
+if ! run_qa_write_session "rerun-tests"; then
+    echo "❌ ERROR: could not write the session record at $RUN_QA_SESSION_FILE."
+    echo "   Refusing to start: stop-qa and stop-rerun would not be able to find this session."
+    exit 1
+fi
 
 echo "🔁 [RERUN-ORCHESTRATOR] Preparing environment..."
 
@@ -210,12 +214,14 @@ echo "🔁 Replaying tasks from rerun-config. Running: node dist/rerun-qa.cjs"
 su - agentuser -c "cd /agent && node dist/rerun-qa.cjs" 200>&- &
 
 AGENT_PID=$!
-run_qa_set_agent "$AGENT_PID"
+if ! run_qa_set_agent "$AGENT_PID"; then
+    echo "⚠️  Could not record the agent pid; stop-qa/stop-rerun will fall back to the orchestrator tree."
+fi
 
 wait "$AGENT_PID"
 AGENT_EXIT_CODE=$?
 AGENT_PID=""
-run_qa_set_agent
+run_qa_set_agent || true
 
 if [ "$AGENT_EXIT_CODE" -ne 0 ]; then
     exit "$AGENT_EXIT_CODE"

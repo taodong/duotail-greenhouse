@@ -37,7 +37,7 @@ fi
 if [ -z "$RERUN_PID" ] && [ -z "$AGENT_PID" ]; then
     echo "ℹ️  Session record is stale (recorded pid $RUN_QA_SESSION_PID is gone or was replaced)."
     echo "   Nothing stopped. Run stop-qa if a stale lock is blocking a new session."
-    rm -f "$RUN_QA_SESSION_FILE"
+    run_qa_clear_session
     exit 0
 fi
 
@@ -61,6 +61,6 @@ if [ -n "$RERUN_PID" ]; then
     terminate_pid_tree "$RERUN_PID"
 fi
 
-rm -f "$RUN_QA_SESSION_FILE"
+run_qa_clear_session
 
 echo "✅ stop-rerun completed."
