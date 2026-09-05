@@ -3,8 +3,8 @@
 # Description: Stops an active rerun-tests process tree.
 #
 # Scoped to rerun sessions on purpose: run-qa and rerun-tests share one lock and one
-# set of PID files, so this command consults the session mode marker and refuses to
-# terminate a run-qa session. Use stop-qa for those, and for stale-lock recovery.
+# session record, so this command validates the record and refuses to terminate a
+# run-qa session. Use stop-qa for those, and for stale-lock recovery.
 
 # Source shared libs co-located with this script (repo scripts/ in dev,
 # /usr/local/bin in the container). The .sh suffix only exists in dev.
@@ -16,28 +16,33 @@ for _name in run-qa-lib; do
   source "${_path}"
 done
 
-PID_FILE="$RUN_QA_PID_FILE"
-AGENT_PID_FILE="$RUN_QA_AGENT_PID_FILE"
-MODE_FILE="$RUN_QA_MODE_FILE"
-
-RERUN_PID=""
-AGENT_PID=""
-
-if [ -f "$PID_FILE" ]; then
-    RERUN_PID="$(cat "$PID_FILE" 2>/dev/null || true)"
-fi
-if [ -f "$AGENT_PID_FILE" ]; then
-    AGENT_PID="$(cat "$AGENT_PID_FILE" 2>/dev/null || true)"
-fi
-
-if [ -z "$RERUN_PID" ] && [ -z "$AGENT_PID" ]; then
+if ! run_qa_read_session; then
     echo "ℹ️  No tracked rerun-tests process found."
     echo "   If a stale lock is blocking a new session, run stop-qa."
     exit 0
 fi
 
-# A missing or unrecognized marker reads as run-qa, so an unidentifiable session is
-# never terminated here.
+RERUN_PID=""
+AGENT_PID=""
+
+# Validate identity before consulting the mode, so a stale record is reported as
+# stale rather than as an active run-qa session.
+if run_qa_pid_matches "$RUN_QA_SESSION_PID" "$RUN_QA_SESSION_START"; then
+    RERUN_PID="$RUN_QA_SESSION_PID"
+fi
+if run_qa_pid_matches "$RUN_QA_SESSION_AGENT_PID" "$RUN_QA_SESSION_AGENT_START"; then
+    AGENT_PID="$RUN_QA_SESSION_AGENT_PID"
+fi
+
+if [ -z "$RERUN_PID" ] && [ -z "$AGENT_PID" ]; then
+    echo "ℹ️  Session record is stale (recorded pid $RUN_QA_SESSION_PID is gone or was replaced)."
+    echo "   Nothing stopped. Run stop-qa if a stale lock is blocking a new session."
+    rm -f "$RUN_QA_SESSION_FILE"
+    exit 0
+fi
+
+# A record whose mode is missing or unrecognized reads as run-qa, so an
+# unidentifiable session is never terminated here.
 SESSION_MODE="$(run_qa_session_mode)"
 
 if [ "$SESSION_MODE" != "rerun-tests" ]; then
@@ -47,15 +52,15 @@ if [ "$SESSION_MODE" != "rerun-tests" ]; then
 fi
 
 if [ -n "$AGENT_PID" ]; then
-    echo "🛑 Stopping rerun-tests agent process tree${AGENT_PID:+ (pid: $AGENT_PID)}..."
+    echo "🛑 Stopping rerun-tests agent process tree (pid: $AGENT_PID)..."
     terminate_pid_tree "$AGENT_PID"
 fi
 
 if [ -n "$RERUN_PID" ]; then
-    echo "🛑 Stopping rerun-tests orchestrator${RERUN_PID:+ (pid: $RERUN_PID)}..."
+    echo "🛑 Stopping rerun-tests orchestrator (pid: $RERUN_PID)..."
     terminate_pid_tree "$RERUN_PID"
 fi
 
-rm -f "$AGENT_PID_FILE" "$PID_FILE" "$MODE_FILE"
+rm -f "$RUN_QA_SESSION_FILE"
 
 echo "✅ stop-rerun completed."

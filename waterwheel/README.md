@@ -139,10 +139,11 @@ any `outputs/rerun-*` folders. Checkpoints only ever belong to the most recent f
 
 ### Relationship to run-qa
 
-`rerun-tests` and `run-qa` share one lock and one set of PID files, because both drive the same
-virtual display and the same MCP services. They can never run at the same time. A session mode
-marker (`/tmp/run-qa.mode`) records which of the two is active so each command can name the
-right stop command.
+`rerun-tests` and `run-qa` share one lock and one session record, because both drive the same
+virtual display and the same MCP services. They can never run at the same time. The session
+record (`/tmp/run-qa.session`) holds the active mode plus the orchestrator and agent PIDs with
+their process start times, so each command can name the right stop command and each stopper can
+prove a recorded PID is still the process that was recorded before terminating it.
 
 ### Examples
 ```bash
@@ -162,7 +163,7 @@ rerun-tests
 
 ## stop-qa Usage
 
-`stop-qa` stops the currently tracked orchestrator process tree, including the launched agent subprocess, if one exists. It is the universal stopper: it stops a `run-qa` session *or* a `rerun-tests` session, whichever is active. It is also the only command that clears a stale lock left by an orphaned process.
+`stop-qa` stops the currently tracked orchestrator process tree, including the launched agent subprocess, if one exists. Each recorded PID is validated against its start time first, so a stale record is discarded rather than acted on. The orchestrator and agent are validated independently, which lets `stop-qa` reap an agent that was left reparented by a `SIGKILL`ed orchestrator. It is the universal stopper: it stops a `run-qa` session *or* a `rerun-tests` session, whichever is active. It is also the only command that clears a stale lock left by an orphaned process.
 
 To stop only a rerun — and be told to leave a `run-qa` session alone — use [`stop-rerun`](#stop-rerun-usage).
 
@@ -194,10 +195,17 @@ stop-rerun
 | --- | --- | --- |
 | A `rerun-tests` session is active | Stops the agent process tree, then the orchestrator; clears the PID and mode files | `0` |
 | A `run-qa` session is active | Stops nothing; reports the active session and points at `stop-qa` | `1` |
+| The record is stale (neither PID validates) | Stops nothing; reports the record as stale, discards it, and points at `stop-qa` | `0` |
 | Nothing is tracked | Reports that no rerun was found, and points at `stop-qa` for stale-lock recovery | `0` |
 
-A session whose mode marker is missing or unrecognized is treated as `run-qa`, so `stop-rerun`
+A session whose recorded mode is missing or unrecognized is treated as `run-qa`, so `stop-rerun`
 never terminates a process tree it cannot positively identify as a rerun.
+
+Identity is verified before anything is terminated. A PID file alone proves nothing: a
+`SIGKILL`ed orchestrator never runs its cleanup trap, so its record outlives it while the lock
+is released — and if that PID is later recycled, acting on the record would terminate an
+unrelated process tree as root. Both stoppers therefore compare each recorded PID's process
+start time against the running process, and treat any mismatch as stale.
 
 `stop-rerun` deliberately does **not** duplicate `stop-qa`'s orphaned-lock recovery. An orphaned
 lock with no PID file carries no mode information, so stale-lock recovery lives only in `stop-qa`.
@@ -220,13 +228,16 @@ It consolidates logic that was previously duplicated across `run-qa` and `stop-q
 
 | Symbol | Description |
 | --- | --- |
-| `RUN_QA_PID_FILE` | Path to the orchestrator PID file (`/tmp/run-qa.pid`) |
-| `RUN_QA_AGENT_PID_FILE` | Path to the agent subprocess PID file (`/tmp/run-qa.agent.pid`) |
 | `RUN_QA_LOCK_FILE` | Path to the exclusive lock file (`/tmp/run-qa.lock`), shared by `run-qa` and `rerun-tests` |
-| `RUN_QA_MODE_FILE` | Path to the session mode marker (`/tmp/run-qa.mode`) |
+| `RUN_QA_SESSION_FILE` | Path to the session record (`/tmp/run-qa.session`) |
 | `terminate_pid_tree <pid>` | Recursively terminates a process and all its children |
-| `is_run_qa_active` | Returns `0` if a `run-qa` or `rerun-tests` session is running, `1` otherwise; sets `$RUN_QA_ACTIVE_PID` |
-| `run_qa_session_mode` | Echoes the active session's mode, `run-qa` or `rerun-tests`; a missing or unrecognized marker reads as `run-qa` |
+| `run_qa_process_start_time <pid>` | Echoes a PID's start time from `/proc`; returns `1` if it cannot be determined |
+| `run_qa_write_session <mode> [agent_pid] [agent_start]` | Writes the record for the current process |
+| `run_qa_set_agent [pid]` | Records the agent subprocess in the record; clears it when called with no argument |
+| `run_qa_read_session` | Loads the record into `RUN_QA_SESSION_{MODE,PID,START,AGENT_PID,AGENT_START}` |
+| `run_qa_pid_matches <pid> <start>` | Returns `0` only if the PID is alive *and* is the same process the record was written for |
+| `is_run_qa_active` | Returns `0` if a **validated** `run-qa` or `rerun-tests` session is running, `1` otherwise; sets `$RUN_QA_ACTIVE_PID` |
+| `run_qa_session_mode` | Echoes the active session's mode, `run-qa` or `rerun-tests`; a missing or unrecognized record reads as `run-qa` |
 
 ---
 

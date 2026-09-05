@@ -24,9 +24,6 @@ for _name in run-qa-lib; do
 done
 
 LOCK_FILE="$RUN_QA_LOCK_FILE"
-PID_FILE="$RUN_QA_PID_FILE"
-AGENT_PID_FILE="$RUN_QA_AGENT_PID_FILE"
-MODE_FILE="$RUN_QA_MODE_FILE"
 AGENT_PID=""
 
 cleanup_lock() {
@@ -34,12 +31,11 @@ cleanup_lock() {
         terminate_pid_tree "$AGENT_PID"
     fi
 
-    # Only clear the session files if this process actually owns the session.
-    # run-qa and rerun-tests share these paths, so an invocation that bounced
-    # off the lock must leave the running session's files — including the agent
-    # PID file — intact, or stop-qa/stop-rerun lose their handle on the agent.
-    if [ -f "$PID_FILE" ] && [ "$(cat "$PID_FILE" 2>/dev/null || true)" = "$$" ]; then
-        rm -f "$PID_FILE" "$MODE_FILE" "$AGENT_PID_FILE"
+    # Only clear the record if this process actually owns the session. run-qa
+    # and rerun-tests share one record, so an invocation that bounced off the
+    # lock must leave the running session's record intact.
+    if run_qa_read_session && [ "$RUN_QA_SESSION_PID" = "$$" ]; then
+        rm -f "$RUN_QA_SESSION_FILE"
     fi
 }
 
@@ -55,8 +51,8 @@ exec 200>"$LOCK_FILE"
 
 if ! flock -n 200; then
     PREV_PID=""
-    if [ -f "$PID_FILE" ]; then
-        PREV_PID="$(cat "$PID_FILE" 2>/dev/null || true)"
+    if run_qa_read_session; then
+        PREV_PID="$RUN_QA_SESSION_PID"
     fi
     PREV_MODE="$(run_qa_session_mode)"
     echo "❌ ERROR: $PREV_MODE is already running${PREV_PID:+ (pid: $PREV_PID)}."
@@ -68,8 +64,7 @@ if ! flock -n 200; then
     exit 1
 fi
 
-echo "$$" > "$PID_FILE"
-echo "run-qa" > "$MODE_FILE"
+run_qa_write_session "run-qa"
 
 echo "🔄 [QA-ORCHESTRATOR] Preparing fresh environment..."
 
@@ -165,12 +160,12 @@ else
 fi
 
 AGENT_PID=$!
-echo "$AGENT_PID" > "$AGENT_PID_FILE"
+run_qa_set_agent "$AGENT_PID"
 
 wait "$AGENT_PID"
 AGENT_EXIT_CODE=$?
 AGENT_PID=""
-rm -f "$AGENT_PID_FILE"
+run_qa_set_agent
 
 if [ "$AGENT_EXIT_CODE" -ne 0 ]; then
     exit "$AGENT_EXIT_CODE"
