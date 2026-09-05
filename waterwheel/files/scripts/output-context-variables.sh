@@ -48,7 +48,7 @@ done
 CONTEXT_FILE="${AGENT_PATH}/outputs/test-context.json"
 
 if is_run_qa_active; then
-    echo "ERROR: Testing is in progress (run-qa pid: $RUN_QA_ACTIVE_PID). Exporting context variables while testing is in progress isn't supported." >&2
+    echo "ERROR: Testing is in progress ($(run_qa_session_mode) pid: $RUN_QA_ACTIVE_PID). Exporting context variables while testing is in progress isn't supported." >&2
     exit 1
 fi
 

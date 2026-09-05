@@ -28,7 +28,7 @@ done
 RESULTS_FILE="${AGENT_PATH}/outputs/test-results.json"
 
 if is_run_qa_active; then
-    echo "⏳ Testing is in progress (run-qa pid: $RUN_QA_ACTIVE_PID). Results will be available once the run completes."
+    echo "⏳ Testing is in progress ($(run_qa_session_mode) pid: $RUN_QA_ACTIVE_PID). Results will be available once the run completes."
     exit 0
 fi
 
