@@ -1209,7 +1209,7 @@ Use `preset-context` to read and update this file. See [preset-context Usage](#p
 | `/usr/local/bin/email-mcp`                  | `root:root` | `700` | Cannot execute | Email MCP launch script                                   |
 | `/usr/local/bin/config-agent`               | `root:root` | `700` | Cannot execute | Script to quickly config the agent                        |
 | `/usr/local/bin/config-ai-provider`         | `root:root` | `700` | Cannot execute | Non-interactively applies provider/model/mode settings    |
-| `/usr/local/bin/run-qa-lib`                 | `root:root` | `700` | Cannot execute | Shared library sourced by `run-qa`, `rerun-tests`, `stop-qa`, `stop-rerun`, `check-test-result` |
+| `/usr/local/bin/run-qa-lib`                 | `root:root` | `700` | Cannot execute | Shared library sourced by `run-qa`, `rerun-tests`, `stop-qa`, `stop-rerun`, `check-test-result`, `get-failure-detail`, `output-context-variables` |
 | `/usr/local/bin/file-upload-lib`            | `root:root` | `700` | Cannot execute | Saves stdin content to a target file path |
 | `/usr/local/bin/agent-file-perms-lib`       | `root:root` | `700` | Cannot execute | Shared library that restricts `tasks/`-`instructions/` files to `640` |
 | `/usr/local/bin/manage-global-constants`    | `root:root` | `700` | Cannot execute | Manages entries in `global-context.json`                  |
