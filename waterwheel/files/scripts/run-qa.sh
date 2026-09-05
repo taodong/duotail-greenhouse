@@ -34,6 +34,10 @@ cleanup_lock() {
     # Only clear the record if this process actually owns the session. run-qa
     # and rerun-tests share one record, so an invocation that bounced off the
     # lock must leave the running session's record intact.
+    #
+    # No lock re-check is needed here (unlike in the stoppers): this trap runs
+    # while FD 200 is still open, so we still hold the lock and no replacement
+    # session can have started.
     if run_qa_read_session && [ "$RUN_QA_SESSION_PID" = "$$" ]; then
         run_qa_clear_session
     fi

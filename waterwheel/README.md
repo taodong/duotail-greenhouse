@@ -146,7 +146,13 @@ their process start times, so each command can name the right stop command and e
 prove a recorded PID is still the process that was recorded before terminating it.
 
 The record is removed by its owner's exit trap, by either stopper, and on sight when found
-stale; a record left behind by a `SIGKILL` is overwritten wholesale by the next session. Both
+stale; a record left behind by a `SIGKILL` is overwritten wholesale by the next session.
+
+The stoppers take the lock before removing anything. Terminating the agent lets the old
+orchestrator exit and release its lock, so a replacement session can start and write its own
+record before a stopper reaches its cleanup — taking the lock first means a stopper only ever
+deletes a record no live session owns. The orchestrators' own exit trap needs no such check:
+it runs while their lock FD is still open, so they still hold the lock. Both
 orchestrators refuse to start if the record cannot be written, since the stoppers would
 otherwise have no way to find the session.
 
@@ -241,6 +247,7 @@ It consolidates logic that was previously duplicated across `run-qa` and `stop-q
 | `run_qa_set_agent [pid]` | Records the agent subprocess in the record; clears it when called with no argument |
 | `run_qa_read_session` | Loads the record into `RUN_QA_SESSION_{MODE,PID,START,AGENT_PID,AGENT_START}` |
 | `run_qa_clear_session` | Removes the record and any temp file left by an interrupted write |
+| `run_qa_clear_session_if_unlocked` | Same, but only when no live session holds the lock; returns `1` and removes nothing otherwise |
 | `run_qa_pid_matches <pid> <start>` | Returns `0` only if the PID is alive *and* is the same process the record was written for |
 | `is_run_qa_active` | Returns `0` if a **validated** `run-qa` or `rerun-tests` session is running, `1` otherwise; sets `$RUN_QA_ACTIVE_PID` |
 | `run_qa_session_mode` | Echoes the active session's mode, `run-qa` or `rerun-tests`; a missing or unrecognized record reads as `run-qa` |

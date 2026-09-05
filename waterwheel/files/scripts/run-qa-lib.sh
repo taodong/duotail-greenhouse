@@ -114,6 +114,25 @@ run_qa_read_session() {
     return 0
 }
 
+# Removes the session record, but only when no live session holds the lock.
+# Terminating the agent can let the old orchestrator exit and release its flock
+# before a stopper reaches its cleanup, so a replacement run-qa/rerun-tests may
+# already have acquired the lock and written its own record — that record must
+# survive. Holding the lock across the removal also closes the gap between the
+# check and the rm. Returns 1, removing nothing, when a new session owns it.
+run_qa_clear_session_if_unlocked() {
+    local rc=0
+    exec 201>"$RUN_QA_LOCK_FILE"
+    if flock -n 201; then
+        run_qa_clear_session
+        flock -u 201
+    else
+        rc=1
+    fi
+    exec 201>&-
+    return "$rc"
+}
+
 # Returns 0 only if PID is alive AND is the same process the record was written
 # for. A recycled PID fails the start-time comparison and is reported as stale.
 run_qa_pid_matches() {

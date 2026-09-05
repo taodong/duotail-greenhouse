@@ -33,8 +33,11 @@ fi
 
 if [ -z "$RUN_QA_PID" ] && [ -z "$AGENT_PID" ]; then
     if [ "$RECORD_PRESENT" = true ]; then
-        echo "ℹ️  Discarding stale session record (recorded pid ${RUN_QA_SESSION_PID:-unknown} is gone or was replaced)."
-        run_qa_clear_session
+        if run_qa_clear_session_if_unlocked; then
+            echo "ℹ️  Discarded stale session record (recorded pid ${RUN_QA_SESSION_PID:-unknown} is gone or was replaced)."
+        else
+            echo "ℹ️  A new session already holds the lock; leaving its record in place."
+        fi
     fi
     # No live process, but check if the lock file is still held by an
     # orphaned process (e.g. Xvfb inheriting FD 200 from a prior run).
@@ -62,6 +65,8 @@ if [ -n "$RUN_QA_PID" ]; then
     terminate_pid_tree "$RUN_QA_PID"
 fi
 
-run_qa_clear_session
+if ! run_qa_clear_session_if_unlocked; then
+    echo "ℹ️  A new session started while stopping; leaving its record in place."
+fi
 
 echo "✅ stop-qa completed."
