@@ -176,3 +176,81 @@ run_qa_session_mode() {
         echo "run-qa"
     fi
 }
+
+# Normalizes a rerun name to the folder suffix the agent uses. Mirrors
+# normalizeRerunName() in the agent's src/utils/rerun-output-dir.ts: trim,
+# lower-case, whitespace runs to "_", strip anything outside [a-z0-9_-].
+# A leading "rerun-" is stripped too, so "login flow", "login_flow" and
+# "rerun-login_flow" all name the same folder -- an operator reading a folder
+# listing should not have to know which form is canonical.
+# Returns 1 when nothing survives normalization.
+run_qa_normalize_rerun_name() {
+    local name="$1"
+
+    # Trim surrounding whitespace.
+    name="${name#"${name%%[![:space:]]*}"}"
+    name="${name%"${name##*[![:space:]]}"}"
+
+    name="$(printf '%s' "$name" | tr '[:upper:]' '[:lower:]')"
+    name="${name#rerun-}"
+    # -s collapses the runs the agent's /\s+/ -> "_" also collapses.
+    name="$(printf '%s' "$name" | tr -s '[:space:]' '_')"
+    name="$(printf '%s' "$name" | tr -cd 'a-z0-9_-')"
+
+    [ -n "$name" ] || return 1
+    printf '%s\n' "$name"
+}
+
+# Echoes the directory a reader command should read results from.
+#   run_qa_resolve_output_dir <agent_path> <mode> [name]
+#
+# mode "run"   -> "<agent_path>/outputs"
+# mode "rerun" -> "<agent_path>/outputs/rerun-<normalized name>", or, with no
+#                 name, the most recently modified "<agent_path>/outputs/rerun-*".
+#
+# Returns 1 with a message on stderr when the requested folder does not exist.
+# Callers must let that failure surface rather than falling back to outputs/:
+# printing the full run's result as though it were the rerun's is exactly the
+# failure this selector exists to remove.
+run_qa_resolve_output_dir() {
+    local agent_path="$1" mode="$2" name="${3:-}"
+    local outputs="${agent_path}/outputs" dir normalized
+
+    if [ "$mode" != "rerun" ]; then
+        printf '%s\n' "$outputs"
+        return 0
+    fi
+
+    if [ -n "$name" ]; then
+        if ! normalized="$(run_qa_normalize_rerun_name "$name")"; then
+            echo "ERROR: rerun name \"$name\" normalizes to an empty string." >&2
+            return 1
+        fi
+        dir="${outputs}/rerun-${normalized}"
+        if [ ! -d "$dir" ]; then
+            echo "ERROR: no rerun output folder at ${dir}." >&2
+            return 1
+        fi
+        printf '%s\n' "$dir"
+        return 0
+    fi
+
+    # No name: the most recently modified rerun-* folder. The auto-numbered
+    # suffix is the lowest free integer rather than a sequence (deleting
+    # rerun-2 makes the next unnamed rerun reuse it), and named folders carry
+    # no number at all, so mtime is the only reliable "latest".
+    # "ls -dt" behaves the same on GNU and BSD; "find -printf" is GNU-only and
+    # these scripts also run on the host in dev.
+    # shellcheck disable=SC2012 # find -printf is GNU-only; folder names
+    # here are always "rerun-<[a-z0-9_-]+>", so ls is safe and portable.
+    dir="$(ls -dt "${outputs}"/rerun-*/ 2>/dev/null | head -1 || true)"
+    dir="${dir%/}"
+
+    if [ -z "$dir" ] || [ ! -d "$dir" ]; then
+        echo "ERROR: no rerun output folder found under ${outputs}." >&2
+        echo "       Run rerun-tests first, or drop --rerun to read the full run's results." >&2
+        return 1
+    fi
+
+    printf '%s\n' "$dir"
+}

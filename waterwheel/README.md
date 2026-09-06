@@ -137,6 +137,49 @@ original run's results untouched.
 Note that the next `run-qa` *does* clean `/agent/outputs`, clearing both the checkpoints and
 any `outputs/rerun-*` folders. Checkpoints only ever belong to the most recent full run.
 
+### Reading rerun results
+
+A rerun folder holds the same filenames as a full run's `outputs/` — `test-results.json`,
+`test-context.json`, `agent.log`, `api-log.json`, `<test-file-stem>_log.json` — written by the
+same agent code, with the same JSON schema. Only `checkpoints/` is absent. So the three reader
+commands read a rerun folder with a `-r` / `--rerun` selector rather than a separate command:
+
+| Invocation | Reads |
+| --- | --- |
+| `check-test-result` | `outputs/` — the full run, unchanged |
+| `check-test-result --rerun` | the most recently modified `outputs/rerun-*/` |
+| `check-test-result --rerun "login flow"` | `outputs/rerun-login_flow/` |
+
+The same selector works on [`get-failure-detail`](#get-failure-detail-usage) and
+[`output-context-variables`](#output-context-variables-usage).
+
+**Names are normalized the way the agent normalizes them** when it creates the folder:
+lower-cased, whitespace runs collapsed to `_`, and any other character stripped. A leading
+`rerun-` is dropped too, so `"login flow"`, `login_flow`, and `rerun-login_flow` all select
+`outputs/rerun-login_flow/`.
+
+**The most recent rerun is chosen by modification time, not by number.** The auto-numbered
+suffix is the *lowest free* integer rather than a sequence — deleting `rerun-2` makes the next
+unnamed rerun reuse it — and named folders carry no number at all.
+
+If the requested folder does not exist (or no `rerun-*` folder exists at all), the command
+exits non-zero and says so. It deliberately does **not** fall back to `outputs/`: reporting the
+full run's result as though it were the rerun's is the failure this selector exists to remove.
+
+#### Two caveats inherited from the agent
+
+1. **A rerun that fails before running any task writes no `test-results.json` anywhere.** A
+   full run records an `incomplete` result in that case; the rerun entry point does not. So
+   `--rerun` with no name can resolve to an *older* rerun folder and report its result as
+   current. If you have just run `rerun-tests` and the output looks stale, check the timestamps
+   in `/agent/outputs/`. To remove the ambiguity, give each rerun a `name` in
+   `rerun-config.json` and select it explicitly.
+2. **A rerun's `agent.log` is split across two folders.** The rerun entry point redirects its
+   logger only after loading config and skills, so those startup lines land in the *top-level*
+   `outputs/agent.log`. `check-test-result --rerun` (when no results file is found) and
+   `get-failure-detail --rerun` therefore also print that file, labeled as pre-rerun startup
+   output — that is where an early rerun failure is actually recorded.
+
 ### Relationship to run-qa
 
 `rerun-tests` and `run-qa` share one lock and one session record, because both drive the same
@@ -233,7 +276,7 @@ rerun-tests
 
 ## run-qa-lib (internal shared library)
 
-`run-qa-lib` is a shared bash library sourced by `run-qa`, `rerun-tests`, `stop-qa`, `stop-rerun`, `check-test-result`, `get-failure-detail`, and `output-context-variables`. It is not intended to be invoked directly.
+`run-qa-lib` is a shared bash library sourced by `run-qa`, `rerun-tests`, `stop-qa`, `stop-rerun`, `check-test-result`, `get-failure-detail`, and `output-context-variables`. It covers two concerns: single-instance session tracking for the two orchestrators, and output-directory resolution for the three readers. It is not intended to be invoked directly.
 
 It consolidates logic that was previously duplicated across `run-qa` and `stop-qa`:
 
@@ -251,6 +294,8 @@ It consolidates logic that was previously duplicated across `run-qa` and `stop-q
 | `run_qa_pid_matches <pid> <start>` | Returns `0` only if the PID is alive *and* is the same process the record was written for |
 | `is_run_qa_active` | Returns `0` if a **validated** `run-qa` or `rerun-tests` session is running, `1` otherwise; sets `$RUN_QA_ACTIVE_PID` |
 | `run_qa_session_mode` | Echoes the active session's mode, `run-qa` or `rerun-tests`; a missing or unrecognized record reads as `run-qa` |
+| `run_qa_normalize_rerun_name <name>` | Echoes a rerun name as its folder suffix, mirroring the agent's normalization (lower-case, whitespace runs to `_`, other characters stripped, leading `rerun-` dropped); returns `1` if nothing survives |
+| `run_qa_resolve_output_dir <agent_path> <mode> [name]` | Echoes the directory a reader command should read from: `<agent_path>/outputs` for mode `run`, or the named — or most recently modified — `outputs/rerun-*` folder for mode `rerun`. Returns `1` with a message on stderr when that folder does not exist |
 
 ---
 
@@ -308,26 +353,38 @@ file-upload-lib --help
 `check-test-result` prints the `exit_condition` from `$AGENT_PATH/outputs/test-results.json`, or reports the current run status if a test is still in progress.
 
 ```bash
-check-test-result [-ap <agent-path>]
+check-test-result [-ap <agent-path>] [-r|--rerun [name]]
 ```
 
 ### Options
 | Option | Description |
 | --- | --- |
 | `-ap <path>` | Override the agent path (default: `/agent`) |
+| `-r`, `--rerun [name]` | Read a rerun's results instead of the full run's. With no name, reads the most recent rerun (by folder modification time). See [Reading rerun results](#reading-rerun-results) |
+| `-h`, `--help`, `h`, `help` | Show usage help |
+
+An unrecognized option is rejected with exit `1` rather than ignored, so a mistyped selector can never quietly print the full run's results in place of a rerun's.
 
 ### Output
 | Condition | Output |
 | --- | --- |
-| `run-qa` is currently active | A message indicating testing is in progress, including the orchestrator PID |
+| `run-qa` or `rerun-tests` is currently active | A message indicating testing is in progress, naming the mode and the orchestrator PID |
 | `test-results.json` exists | The `exit_condition` value from the results file |
 | `test-results.json` missing, `agent.log` missing | `ℹ️  No test results found.` |
 | `test-results.json` missing, `agent.log` exists | `ℹ️  No test results found.` followed by the full content of `agent.log` |
+
+Under `--rerun`, every path above resolves inside the selected `outputs/rerun-<name>/` folder, and the "no test results" case additionally prints the top-level `outputs/agent.log` (see [Reading rerun results](#reading-rerun-results)). The name of the folder being read is written to **stderr**, so stdout carries exactly what it does today.
 
 ### Examples
 ```bash
 # Check results after a run
 check-test-result
+
+# Check the most recent rerun's results
+check-test-result --rerun
+
+# Check a specific rerun's results
+check-test-result --rerun "login flow"
 
 # Check results using a custom agent path
 check-test-result -ap /tmp/my-agent
@@ -340,7 +397,7 @@ check-test-result -ap /tmp/my-agent
 `get-failure-detail` prints a full diagnostic report for the first failed test found in `$AGENT_PATH/outputs/test-results.json`. If a test run is still in progress, it reports that instead.
 
 ```bash
-get-failure-detail [-ap <agent-path>] [-d]
+get-failure-detail [-ap <agent-path>] [-d] [-r|--rerun [name]]
 ```
 
 ### Options
@@ -348,6 +405,10 @@ get-failure-detail [-ap <agent-path>] [-d]
 | --- | --- |
 | `-ap <path>` | Override the agent path (default: `/agent`) |
 | `-d` | Include API log (`$AGENT_PATH/outputs/api-log.json`) at the end of the report |
+| `-r`, `--rerun [name]` | Read a rerun's results instead of the full run's. With no name, reads the most recent rerun (by folder modification time). See [Reading rerun results](#reading-rerun-results) |
+| `-h`, `--help`, `h`, `help` | Show usage help |
+
+An unrecognized option is rejected with exit `1` rather than ignored.
 
 ### Output when a failed test is found
 
@@ -360,7 +421,10 @@ Each section is printed in order. Missing files are reported inline and do not a
 | **Test Steps** | `$AGENT_PATH/outputs/<test-file-stem>_log.json` |
 | **Test Context** | `$AGENT_PATH/outputs/test-context.json` |
 | **Agent Log** | `$AGENT_PATH/outputs/agent.log` |
+| **Pre-rerun Startup Log** _(only with `--rerun`, only if file exists)_ | `$AGENT_PATH/outputs/agent.log` |
 | **API Log** _(only with `-d`, only if file exists)_ | `$AGENT_PATH/outputs/api-log.json` |
+
+Under `--rerun`, every `outputs/` path above resolves inside the selected `outputs/rerun-<name>/` folder instead — except **Test Detail**, which reads `$AGENT_PATH/tasks/<test-file>`: task files live outside `outputs/` and are the same ones a rerun replays.
 
 ### Output when no failure
 
@@ -1084,14 +1148,17 @@ enable-test-on-host -ap /tmp/my-agent -cp /tmp/config-helpers
 `output-context-variables` prints the user-scoped context values produced by the latest run as a flat JSON object, read from `$AGENT_PATH/outputs/test-context.json`. Tests store values such as AI-generated usernames and passwords there; this command extracts the entries whose `scope` is `user` for reuse outside the container.
 
 ```bash
-output-context-variables [-ap <agent-path>]
+output-context-variables [-ap <agent-path>] [-r|--rerun [name]]
 ```
 
 ### Options
 | Option | Description |
 | --- | --- |
 | `-ap <path>` | Override the agent path (default: `/agent`, or the `AGENT_PATH` environment variable) |
+| `-r`, `--rerun [name]` | Read a rerun's results instead of the full run's. With no name, reads the most recent rerun (by folder modification time). See [Reading rerun results](#reading-rerun-results) |
 | `-h`, `--help`, `h`, `help` | Show usage help |
+
+An unrecognized option is rejected with exit `1` rather than ignored. Under `--rerun`, the folder being read is named on **stderr** only, so stdout stays pure JSON.
 
 ### Behavior
 - Reports an error and exits non-zero if a `run-qa` run is currently active (exporting context variables while testing is in progress is not supported).
@@ -1104,6 +1171,9 @@ output-context-variables [-ap <agent-path>]
 ```bash
 # Output user-scoped context values from the latest run
 output-context-variables
+
+# Output the most recent rerun's user-scoped context values
+output-context-variables --rerun
 
 # Use a custom agent path
 output-context-variables -ap /tmp/my-agent
