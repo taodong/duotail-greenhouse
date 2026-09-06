@@ -153,10 +153,17 @@ commands read a rerun folder with a `-r` / `--rerun` selector rather than a sepa
 The same selector works on [`get-failure-detail`](#get-failure-detail-usage) and
 [`output-context-variables`](#output-context-variables-usage).
 
-**Names are normalized the way the agent normalizes them** when it creates the folder:
-lower-cased, whitespace runs collapsed to `_`, and any other character stripped. A leading
-`rerun-` is dropped too, so `"login flow"`, `login_flow`, and `rerun-login_flow` all select
-`outputs/rerun-login_flow/`.
+**Names are normalized exactly the way the agent normalizes them** when it creates the folder:
+lower-cased, whitespace runs collapsed to a single `_`, and any other character stripped. So
+`"login flow"`, `"Login Flow"`, and `login_flow` all select `outputs/rerun-login_flow/`.
+Underscores you typed are preserved — `login__flow` selects `outputs/rerun-login__flow/`, a
+different folder.
+
+As a convenience you may also paste a folder name straight from a listing: if
+`rerun-<name>` does not exist and `<name>` itself begins with `rerun-`, that prefix is dropped
+and the result retried. This is strictly a fallback — the literal name always wins, so a rerun
+genuinely named `rerun-login_flow` (folder `outputs/rerun-rerun-login_flow/`) is never shadowed
+by the unrelated rerun named `login flow`.
 
 **The most recent rerun is chosen by modification time, not by number.** The auto-numbered
 suffix is the *lowest free* integer rather than a sequence — deleting `rerun-2` makes the next

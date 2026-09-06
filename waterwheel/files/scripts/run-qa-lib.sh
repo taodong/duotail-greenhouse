@@ -177,12 +177,16 @@ run_qa_session_mode() {
     fi
 }
 
-# Normalizes a rerun name to the folder suffix the agent uses. Mirrors
-# normalizeRerunName() in the agent's src/utils/rerun-output-dir.ts: trim,
-# lower-case, whitespace runs to "_", strip anything outside [a-z0-9_-].
-# A leading "rerun-" is stripped too, so "login flow", "login_flow" and
-# "rerun-login_flow" all name the same folder -- an operator reading a folder
-# listing should not have to know which form is canonical.
+# Normalizes a rerun name to the folder suffix the agent uses. This must be a
+# faithful mirror of normalizeRerunName() in the agent's
+# src/utils/rerun-output-dir.ts -- any divergence resolves to the wrong folder:
+#
+#   name.trim().toLowerCase().replace(/\s+/g, "_").replace(/[^a-z0-9_-]/g, "")
+#
+# In particular it does NOT strip a leading "rerun-": the agent does not, so a
+# rerun genuinely named "rerun-login_flow" lives in "rerun-rerun-login_flow".
+# Accepting a pasted folder name is handled as a fallback in
+# run_qa_resolve_output_dir, where it cannot shadow a real folder.
 # Returns 1 when nothing survives normalization.
 run_qa_normalize_rerun_name() {
     local name="$1"
@@ -192,9 +196,12 @@ run_qa_normalize_rerun_name() {
     name="${name%"${name##*[![:space:]]}"}"
 
     name="$(printf '%s' "$name" | tr '[:upper:]' '[:lower:]')"
-    name="${name#rerun-}"
-    # -s collapses the runs the agent's /\s+/ -> "_" also collapses.
-    name="$(printf '%s' "$name" | tr -s '[:space:]' '_')"
+    # Collapse whitespace runs, then map to "_", matching /\s+/g -> "_".
+    # Note "tr -s SET1 SET2" squeezes repeats of SET2, so squeezing directly
+    # into "_" would also collapse underscores the operator actually typed
+    # ("login__flow" -> "login_flow"), which the agent preserves.
+    name="$(printf '%s' "$name" | tr -s '[:space:]' ' ')"
+    name="${name// /_}"
     name="$(printf '%s' "$name" | tr -cd 'a-z0-9_-')"
 
     [ -n "$name" ] || return 1
@@ -214,7 +221,7 @@ run_qa_normalize_rerun_name() {
 # failure this selector exists to remove.
 run_qa_resolve_output_dir() {
     local agent_path="$1" mode="$2" name="${3:-}"
-    local outputs="${agent_path}/outputs" dir normalized
+    local outputs="${agent_path}/outputs" dir normalized alt
 
     if [ "$mode" != "rerun" ]; then
         printf '%s\n' "$outputs"
@@ -227,12 +234,27 @@ run_qa_resolve_output_dir() {
             return 1
         fi
         dir="${outputs}/rerun-${normalized}"
-        if [ ! -d "$dir" ]; then
-            echo "ERROR: no rerun output folder at ${dir}." >&2
-            return 1
+        if [ -d "$dir" ]; then
+            printf '%s\n' "$dir"
+            return 0
         fi
-        printf '%s\n' "$dir"
-        return 0
+
+        # Convenience for an operator who pasted a folder name from a listing.
+        # Strictly a fallback: the literal name always wins, so a rerun really
+        # named "rerun-login_flow" (folder "rerun-rerun-login_flow") can never
+        # be shadowed by the unrelated rerun named "login flow".
+        case "$normalized" in
+            rerun-?*)
+                alt="${outputs}/rerun-${normalized#rerun-}"
+                if [ -d "$alt" ]; then
+                    printf '%s\n' "$alt"
+                    return 0
+                fi
+                ;;
+        esac
+
+        echo "ERROR: no rerun output folder at ${dir}." >&2
+        return 1
     fi
 
     # No name: the most recently modified rerun-* folder. The auto-numbered
