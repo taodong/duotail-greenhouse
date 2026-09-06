@@ -245,8 +245,8 @@ run-qa
 ## stop-rerun Usage
 
 `stop-rerun` stops an active `rerun-tests` session. It is scoped to reruns on purpose: because
-`run-qa` and `rerun-tests` share one set of PID files, this command consults the session mode
-marker and refuses to terminate a `run-qa` session.
+`run-qa` and `rerun-tests` share one session record, this command consults the mode recorded in
+it and refuses to terminate a `run-qa` session.
 
 ```bash
 stop-rerun
@@ -254,7 +254,7 @@ stop-rerun
 
 | Situation | Behavior | Exit code |
 | --- | --- | --- |
-| A `rerun-tests` session is active | Stops the agent process tree, then the orchestrator; clears the PID and mode files | `0` |
+| A `rerun-tests` session is active | Stops the agent process tree, then the orchestrator; clears the session record | `0` |
 | A `run-qa` session is active | Stops nothing; reports the active session and points at `stop-qa` | `1` |
 | The record is stale (neither PID validates) | Stops nothing; reports the record as stale, discards it, and points at `stop-qa` | `0` |
 | Nothing is tracked | Reports that no rerun was found, and points at `stop-qa` for stale-lock recovery | `0` |
@@ -262,14 +262,19 @@ stop-rerun
 A session whose recorded mode is missing or unrecognized is treated as `run-qa`, so `stop-rerun`
 never terminates a process tree it cannot positively identify as a rerun.
 
-Identity is verified before anything is terminated. A PID file alone proves nothing: a
+Identity is verified before anything is terminated. A recorded PID alone proves nothing: a
 `SIGKILL`ed orchestrator never runs its cleanup trap, so its record outlives it while the lock
 is released — and if that PID is later recycled, acting on the record would terminate an
 unrelated process tree as root. Both stoppers therefore compare each recorded PID's process
-start time against the running process, and treat any mismatch as stale.
+start time against the running process, and treat any mismatch as stale. The orchestrator is
+re-validated a second time immediately before it is terminated, because stopping the agent
+first can block for several seconds — long enough for the orchestrator's `wait` to return and
+for it to exit on its own.
 
 `stop-rerun` deliberately does **not** duplicate `stop-qa`'s orphaned-lock recovery. An orphaned
-lock with no PID file carries no mode information, so stale-lock recovery lives only in `stop-qa`.
+lock with no session record carries no mode information, so stale-lock recovery lives only in
+`stop-qa` — and that recovery never touches a lock held by a session that is actually running:
+`stop-qa` re-checks for a live session first and leaves it alone.
 
 ### Examples
 ```bash

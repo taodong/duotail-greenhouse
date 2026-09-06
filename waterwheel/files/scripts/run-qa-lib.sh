@@ -148,9 +148,14 @@ run_qa_pid_matches() {
         return 0
     fi
 
+    # A record written without /proc stores "-" and was handled above, so
+    # reaching here means kill -0 succeeded and the /proc read then failed --
+    # i.e. the process exited in between. Report it as gone rather than as a
+    # match: treating it as live makes check-test-result claim a finished run is
+    # still in progress, and makes the stoppers act on a PID they cannot
+    # identify.
     if ! actual="$(run_qa_process_start_time "$pid")"; then
-        echo "⚠️  Cannot read /proc/$pid to verify session identity; proceeding on liveness alone." >&2
-        return 0
+        return 1
     fi
 
     [ "$actual" = "$expected" ]

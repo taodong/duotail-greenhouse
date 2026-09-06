@@ -23,12 +23,14 @@ if ! run_qa_read_session; then
 fi
 
 RERUN_PID=""
+RERUN_START=""
 AGENT_PID=""
 
 # Validate identity before consulting the mode, so a stale record is reported as
 # stale rather than as an active run-qa session.
 if run_qa_pid_matches "$RUN_QA_SESSION_PID" "$RUN_QA_SESSION_START"; then
     RERUN_PID="$RUN_QA_SESSION_PID"
+    RERUN_START="$RUN_QA_SESSION_START"
 fi
 if run_qa_pid_matches "$RUN_QA_SESSION_AGENT_PID" "$RUN_QA_SESSION_AGENT_START"; then
     AGENT_PID="$RUN_QA_SESSION_AGENT_PID"
@@ -58,8 +60,16 @@ if [ -n "$AGENT_PID" ]; then
 fi
 
 if [ -n "$RERUN_PID" ]; then
-    echo "🛑 Stopping rerun-tests orchestrator (pid: $RERUN_PID)..."
-    terminate_pid_tree "$RERUN_PID"
+    # Re-validate: terminating the agent above blocks for up to 4s, and killing
+    # it makes the orchestrator's `wait` return so it exits on its own. By now
+    # the PID validated at the top may be gone or recycled by an unrelated
+    # process, and terminate_pid_tree does no identity check of its own.
+    if run_qa_pid_matches "$RERUN_PID" "$RERUN_START"; then
+        echo "🛑 Stopping rerun-tests orchestrator (pid: $RERUN_PID)..."
+        terminate_pid_tree "$RERUN_PID"
+    else
+        echo "ℹ️  rerun-tests orchestrator (pid: $RERUN_PID) already exited."
+    fi
 fi
 
 if ! run_qa_clear_session_if_unlocked; then
