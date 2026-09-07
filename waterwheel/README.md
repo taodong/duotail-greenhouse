@@ -306,8 +306,8 @@ It consolidates logic that was previously duplicated across `run-qa` and `stop-q
 | `run_qa_pid_matches <pid> <start>` | Returns `0` only if the PID is alive *and* is the same process the record was written for |
 | `is_run_qa_active` | Returns `0` if a **validated** `run-qa` or `rerun-tests` session is running, `1` otherwise; sets `$RUN_QA_ACTIVE_PID` |
 | `run_qa_session_mode` | Echoes the active session's mode, `run-qa` or `rerun-tests`; a missing or unrecognized record reads as `run-qa` |
-| `run_qa_normalize_rerun_name <name>` | Echoes a rerun name as its folder suffix, mirroring the agent's normalization (lower-case, whitespace runs to `_`, other characters stripped, leading `rerun-` dropped); returns `1` if nothing survives |
-| `run_qa_resolve_output_dir <agent_path> <mode> [name]` | Echoes the directory a reader command should read from: `<agent_path>/outputs` for mode `run`, or the named — or most recently modified — `outputs/rerun-*` folder for mode `rerun`. Returns `1` with a message on stderr when that folder does not exist |
+| `run_qa_normalize_rerun_name <name>` | Echoes a rerun name as its folder suffix, a faithful mirror of the agent's normalization (lower-case, whitespace runs to `_`, other characters stripped). A leading `rerun-` is **preserved**, because the agent preserves it; returns `1` if nothing survives |
+| `run_qa_resolve_output_dir <agent_path> <mode> [name]` | Echoes the directory a reader command should read from: `<agent_path>/outputs` for mode `run`, or the named — or most recently modified — `outputs/rerun-*` folder for mode `rerun`. A name that itself begins with `rerun-` is retried without that prefix, but only as a fallback once the literal folder is absent. Returns `1` with a message on stderr when no folder matches |
 
 ---
 
