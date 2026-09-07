@@ -5,35 +5,57 @@ set -euo pipefail
 
 AGENT_PATH="${AGENT_PATH:-/agent}"
 _LIB="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+RESULT_MODE="run"
+RERUN_NAME=""
 
 usage() {
     cat <<EOF
-Usage: output-context-variables [-ap <agent-path>]
+Usage: output-context-variables [-ap <agent-path>] [-r|--rerun [name]]
 
 Outputs the user-scoped context values from the latest run as a flat JSON
 object, read from <agent-path>/outputs/test-context.json.
 
 Options:
    -ap <agent-path>          Override the agent path (default: \$AGENT_PATH or /agent)
+   -r, --rerun [name]        Read a rerun's context instead of the full run's.
+                             With no name, reads the most recent rerun.
    -h, --help, h, help       Show this help message
 EOF
 }
 
-case "${1:-}" in
-    -h | --help | h | help)
-        usage
-        exit 0
-        ;;
-esac
-
-if [[ "${1:-}" == "-ap" ]]; then
-    if [ -z "${2:-}" ]; then
-        echo "ERROR: -ap requires an agent path." >&2
-        exit 1
-    fi
-    AGENT_PATH="$2"
-    shift 2
-fi
+while [[ $# -gt 0 ]]; do
+    case "${1:-}" in
+        -h | --help | h | help)
+            usage
+            exit 0
+            ;;
+        -ap)
+            if [ -z "${2:-}" ]; then
+                echo "ERROR: -ap requires an agent path." >&2
+                exit 1
+            fi
+            AGENT_PATH="$2"
+            shift 2
+            ;;
+        -r | --rerun)
+            RESULT_MODE="rerun"
+            # The name is optional: consume the next argument only when there is
+            # one and it is not another flag.
+            if [ -n "${2:-}" ] && [[ "$2" != -* ]]; then
+                RERUN_NAME="$2"
+                shift
+            fi
+            shift
+            ;;
+        *)
+            # Rejected rather than ignored: a mistyped selector must not quietly
+            # emit the full run's context instead of the rerun's.
+            echo "ERROR: unknown option: $1" >&2
+            usage >&2
+            exit 1
+            ;;
+    esac
+done
 
 # Source shared libs co-located with this script (repo scripts/ in dev,
 # /usr/local/bin in the container). The .sh suffix only exists in dev.
@@ -45,11 +67,17 @@ for _name in run-qa-lib; do
   source "${_path}"
 done
 
-CONTEXT_FILE="${AGENT_PATH}/outputs/test-context.json"
-
 if is_run_qa_active; then
     echo "ERROR: Testing is in progress ($(run_qa_session_mode) pid: $RUN_QA_ACTIVE_PID). Exporting context variables while testing is in progress isn't supported." >&2
     exit 1
+fi
+
+OUTPUT_DIR="$(run_qa_resolve_output_dir "$AGENT_PATH" "$RESULT_MODE" "$RERUN_NAME")"
+CONTEXT_FILE="${OUTPUT_DIR}/test-context.json"
+
+if [ "$RESULT_MODE" = "rerun" ]; then
+    # stderr only: stdout is machine-read JSON and must stay exactly that.
+    echo "🔁 Reading rerun context from ${OUTPUT_DIR}" >&2
 fi
 
 if [ ! -f "$CONTEXT_FILE" ]; then
