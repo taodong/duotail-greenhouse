@@ -105,9 +105,25 @@ printf '{"results":[' > "$agent/outputs/rerun-empty/test-results.json"
 trunc=$(bash "$script" -ap "$agent" 2> "$tmpdir/trunc.err")
 printf '%s' "$trunc" | jq -e '[.reruns[].name] == ["login_flow", "1"]' > /dev/null \
   || fail 'expected an unparseable rerun to be skipped, not to abort'
-grep -Fq 'Skipping rerun "empty"' "$tmpdir/trunc.err" \
-  || fail 'expected a stderr warning for the unparseable rerun'
+grep -Fq 'Skipping rerun "empty": unreadable' "$tmpdir/trunc.err" \
+  || fail 'expected the warning to name corruption, not a missing file'
+
+# "jq empty" exits 0 on a zero-byte file, so this case previously fell through
+# the skip branch and dropped the rerun with no warning at all -- and in full
+# mode that is indistinguishable from no rerun ever having run.
+echo '== an empty rerun results file is skipped with a warning =='
+: > "$agent/outputs/rerun-empty/test-results.json"
+empty_rerun=$(bash "$script" -ap "$agent" 2> "$tmpdir/emptyrerun.err")
+printf '%s' "$empty_rerun" | jq -e '[.reruns[].name] == ["login_flow", "1"]' > /dev/null \
+  || fail 'expected an empty rerun results file to be skipped'
+grep -Fq 'Skipping rerun "empty"' "$tmpdir/emptyrerun.err" \
+  || fail 'expected a stderr warning for the empty rerun results file'
 rm -f "$agent/outputs/rerun-empty/test-results.json"
+
+echo '== a missing rerun results file says so, not "unreadable" =='
+missing_err=$(bash "$script" -ap "$agent" 2>&1 >/dev/null || true)
+printf '%s' "$missing_err" | grep -Fq 'Skipping rerun "empty": no test-results.json' \
+  || fail 'expected a missing file to be reported as missing'
 
 echo '== --list-results summarizes the run then each rerun, run-level fields only =='
 results_out=$(bash "$script" -ap "$agent" --list-results 2>/dev/null)
@@ -154,6 +170,27 @@ if bash "$script" -ap "$empty_agent" > "$tmpdir/trunc.out" 2>/dev/null; then
 fi
 [ ! -s "$tmpdir/trunc.out" ] || fail 'expected empty stdout for an unparseable results file'
 
+# An empty file is what a container killed mid-write leaves behind, and it is
+# the case "jq empty" silently accepted: full mode emitted {"test_run": null}
+# with exit 0, and --list-tests emitted nothing at all -- stdout that is not
+# JSON, from a command whose contract is that stdout is always JSON.
+echo '== an empty run results file is not a valid report, in any mode =='
+for mode in '' '--list-tests' '--list-results'; do
+  : > "$empty_agent/outputs/test-results.json"
+  # shellcheck disable=SC2086 # deliberate word splitting: "" must pass no flag
+  if bash "$script" -ap "$empty_agent" $mode > "$tmpdir/zero.out" 2>/dev/null; then
+    fail "expected a non-zero exit for an empty results file (mode: ${mode:-full})"
+  fi
+  [ ! -s "$tmpdir/zero.out" ] \
+    || fail "expected empty stdout for an empty results file (mode: ${mode:-full})"
+done
+
+echo '== a file holding a bare JSON value is not a valid report =='
+printf 'null' > "$empty_agent/outputs/test-results.json"
+if bash "$script" -ap "$empty_agent" > /dev/null 2>&1; then
+  fail 'expected a non-zero exit for a results file holding a bare null'
+fi
+
 echo '== an unknown option is rejected =='
 if bash "$script" -ap "$agent" --list-reruns > /dev/null 2>&1; then
   fail 'expected an unknown option to be rejected'
@@ -163,5 +200,13 @@ echo '== -ap requires a value =='
 if bash "$script" -ap > /dev/null 2>&1; then
   fail 'expected -ap with no value to be rejected'
 fi
+
+echo '== -ap rejects a following flag instead of consuming it =='
+if bash "$script" -ap --list-tests > /dev/null 2>&1; then
+  fail 'expected -ap followed by a flag to be rejected'
+fi
+ap_err=$(bash "$script" -ap --list-tests 2>&1 >/dev/null || true)
+printf '%s' "$ap_err" | grep -Fq 'requires an agent path' \
+  || fail 'expected -ap to report a missing path, not a missing report'
 
 echo 'get-test-report smoke checks passed'

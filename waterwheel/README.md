@@ -493,10 +493,10 @@ get-test-report [-ap <agent-path>] [--list-tests | --list-results]
 | Condition | stdout | Exit |
 | --- | --- | --- |
 | `run-qa` or `rerun-tests` is currently active | — (message on stderr, naming the mode and PID) | `1` |
-| `outputs/test-results.json` missing or unparseable | — (`ERROR: test report isn't available.` on stderr) | `1` |
+| `outputs/test-results.json` missing, empty, or unparseable | — (`ERROR: test report isn't available.` on stderr) | `1` |
 | Run results present, no `rerun-*` folders | `{"test_run": …}`, with **no** `reruns` key | `0` |
 | Run results present, reruns present | `{"test_run": …, "reruns": [ … ]}` | `0` |
-| A `rerun-*` folder has no or unparseable results | that rerun is omitted; `⚠️  Skipping rerun "<name>": no test-results.json` on stderr | `0` |
+| A `rerun-*` folder has no or unparseable results | that rerun is omitted; `⚠️  Skipping rerun "<name>": …` on stderr, naming whether the file was missing or unreadable | `0` |
 
 The `reruns` array is ordered oldest to newest by folder modification time — the same ordering `--rerun` with no name uses to pick the latest, and for the same reason (see [Reading rerun results](#reading-rerun-results)). Each element is `{"name": …, "test_result": …}`, where `name` is the folder's basename without its `rerun-` prefix, i.e. exactly the value to pass to `check-test-result --rerun <name>`.
 

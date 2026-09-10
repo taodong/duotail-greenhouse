@@ -32,7 +32,11 @@ while [[ $# -gt 0 ]]; do
             exit 0
             ;;
         -ap)
-            if [ -z "${2:-}" ]; then
+            # Rejects a following flag, not just a missing value: "-ap
+            # --list-tests" would otherwise set AGENT_PATH to "--list-tests" and
+            # report "test report isn't available" -- the same quiet
+            # misinterpretation the unknown-option branch below guards against.
+            if [ -z "${2:-}" ] || [[ "$2" == -* ]]; then
                 echo "ERROR: -ap requires an agent path." >&2
                 exit 1
             fi
@@ -79,10 +83,23 @@ fi
 
 RESULTS_FILE="${AGENT_PATH}/outputs/test-results.json"
 
-# "jq empty" is the parse check. Without it a truncated results file -- possible
-# if the container was killed mid-write -- would abort under "set -e" with a raw
-# jq parse error instead of this message.
-if [ ! -f "$RESULTS_FILE" ] || ! jq empty "$RESULTS_FILE" 2>/dev/null; then
+# Returns 0 only when the file holds one JSON object.
+#
+# NOT "jq empty": that exits 0 on a zero-byte or whitespace-only file, because
+# there are no inputs for the filter to run against and so nothing raises an
+# error. An empty file is exactly what a container killed mid-write leaves
+# behind -- the case the guard exists for -- and letting it through produced
+# "test_run": null with exit 0, and empty stdout under --list-tests.
+#
+# "type == \"object\"" also rejects a file holding a bare null, string or array,
+# none of which writeTestResults can produce. jq -e exits non-zero for all of
+# them: 4 when there is no output at all, 5 on a parse error, 1 when the last
+# output was false.
+results_file_is_readable() {
+    [ -f "$1" ] && jq -e 'type == "object"' "$1" >/dev/null 2>&1
+}
+
+if ! results_file_is_readable "$RESULTS_FILE"; then
     echo "ERROR: test report isn't available." >&2
     exit 1
 fi
@@ -112,8 +129,16 @@ emit_rerun_docs() {
     while IFS= read -r dir; do
         name="$(rerun_name_of "$dir")"
         file="${dir}/test-results.json"
-        if [ ! -f "$file" ] || ! jq empty "$file" 2>/dev/null; then
-            echo "⚠️  Skipping rerun \"${name}\": no test-results.json" >&2
+        if ! results_file_is_readable "$file"; then
+            # Distinguish the two causes: a rerun that died before writing
+            # anything leaves no file, while one killed mid-write leaves an
+            # empty or truncated one. Sending an operator to look for a missing
+            # file when it is present but corrupt wastes the warning.
+            if [ -f "$file" ]; then
+                echo "⚠️  Skipping rerun \"${name}\": unreadable test-results.json" >&2
+            else
+                echo "⚠️  Skipping rerun \"${name}\": no test-results.json" >&2
+            fi
             continue
         fi
         jq --arg name "$name" "$filter" "$file"
