@@ -91,12 +91,24 @@ RESULTS_FILE="${AGENT_PATH}/outputs/test-results.json"
 # behind -- the case the guard exists for -- and letting it through produced
 # "test_run": null with exit 0, and empty stdout under --list-tests.
 #
+# The "-s" is what makes "exactly one" true rather than merely claimed. jq
+# accepts a stream of concatenated values, and jq -e reports the truthiness of
+# only the LAST one, so an unslurped "type == \"object\"" passes on "{}{}" -- and
+# even on "[1]{}". Slurping collapses the file to an array whose length is the
+# number of values it holds, so "length == 1" rejects both.
+#
+# That mattered downstream in three different ways: --list-tests ran its filter
+# once per value and emitted several top-level documents (stdout that no strict
+# parser accepts), full mode took $run[0] and silently discarded the rest, and a
+# concatenated rerun file produced two reruns[] entries carrying the SAME name --
+# duplicate keys in what is documented as an index into the other readers.
+#
 # "type == \"object\"" also rejects a file holding a bare null, string or array,
 # none of which writeTestResults can produce. jq -e exits non-zero for all of
-# them: 4 when there is no output at all, 5 on a parse error, 1 when the last
-# output was false.
+# them: 4 when there is no output at all, 5 on a parse error, 1 when the result
+# was false.
 results_file_is_readable() {
-    [ -f "$1" ] && jq -e 'type == "object"' "$1" >/dev/null 2>&1
+    [ -f "$1" ] && jq -e -s 'length == 1 and (.[0] | type == "object")' "$1" >/dev/null 2>&1
 }
 
 if ! results_file_is_readable "$RESULTS_FILE"; then

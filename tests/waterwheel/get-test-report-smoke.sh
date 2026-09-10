@@ -191,6 +191,50 @@ if bash "$script" -ap "$empty_agent" > /dev/null 2>&1; then
   fail 'expected a non-zero exit for a results file holding a bare null'
 fi
 
+# jq accepts a stream of concatenated values and jq -e reports only the LAST
+# one's truthiness, so an unslurped check passes on "{}{}" -- and on "[1]{}".
+# Unguarded, --list-tests then emitted several top-level documents, which no
+# strict JSON parser accepts.
+echo '== concatenated JSON values are not a valid report, in any mode =='
+for mode in '' '--list-tests' '--list-results'; do
+  printf '{"results":[],"status":"complete"}\n{"results":[],"status":"incomplete"}\n' \
+    > "$empty_agent/outputs/test-results.json"
+  # shellcheck disable=SC2086 # deliberate word splitting: "" must pass no flag
+  if bash "$script" -ap "$empty_agent" $mode > "$tmpdir/multi.out" 2>/dev/null; then
+    fail "expected a non-zero exit for concatenated values (mode: ${mode:-full})"
+  fi
+  [ ! -s "$tmpdir/multi.out" ] \
+    || fail "expected empty stdout for concatenated values (mode: ${mode:-full})"
+done
+
+echo '== a leading non-object does not sneak past the trailing object =='
+printf '[1]\n{"results":[],"status":"complete"}\n' > "$empty_agent/outputs/test-results.json"
+if bash "$script" -ap "$empty_agent" > /dev/null 2>&1; then
+  fail 'expected a non-zero exit when only the last value is an object'
+fi
+
+# Unguarded this produced two reruns[] entries carrying the same name --
+# duplicate keys in what is documented as an index into the other readers.
+echo '== a concatenated rerun results file is skipped, not double-counted =='
+printf '{"results":[],"status":"complete","test_type":"rerun","test_name":"a"}\n{"results":[],"status":"incomplete","test_type":"rerun","test_name":"b"}\n' \
+  > "$agent/outputs/rerun-empty/test-results.json"
+multi_rerun=$(bash "$script" -ap "$agent" 2> "$tmpdir/multirerun.err")
+printf '%s' "$multi_rerun" | jq -e '[.reruns[].name] == ["login_flow", "1"]' > /dev/null \
+  || fail 'expected a concatenated rerun file to be skipped, not to add entries'
+printf '%s' "$multi_rerun" | jq -e '[.reruns[].name] | (length) == (unique | length)' > /dev/null \
+  || fail 'expected rerun names to stay unique'
+grep -Fq 'Skipping rerun "empty"' "$tmpdir/multirerun.err" \
+  || fail 'expected a stderr warning for the concatenated rerun file'
+rm -f "$agent/outputs/rerun-empty/test-results.json"
+
+echo '== every mode emits exactly one JSON document =='
+for mode in '' '--list-tests' '--list-results'; do
+  # shellcheck disable=SC2086 # deliberate word splitting: "" must pass no flag
+  bash "$script" -ap "$agent" $mode 2>/dev/null > "$tmpdir/doc.out"
+  jq -e -s 'length == 1' "$tmpdir/doc.out" > /dev/null \
+    || fail "expected exactly one top-level document (mode: ${mode:-full})"
+done
+
 echo '== an unknown option is rejected =='
 if bash "$script" -ap "$agent" --list-reruns > /dev/null 2>&1; then
   fail 'expected an unknown option to be rejected'

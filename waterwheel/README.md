@@ -493,7 +493,7 @@ get-test-report [-ap <agent-path>] [--list-tests | --list-results]
 | Condition | stdout | Exit |
 | --- | --- | --- |
 | `run-qa` or `rerun-tests` is currently active | — (message on stderr, naming the mode and PID) | `1` |
-| `outputs/test-results.json` missing, empty, or unparseable | — (`ERROR: test report isn't available.` on stderr) | `1` |
+| `outputs/test-results.json` missing, empty, unparseable, or not exactly one JSON object | — (`ERROR: test report isn't available.` on stderr) | `1` |
 | Run results present, no `rerun-*` folders | `{"test_run": …}`, with **no** `reruns` key | `0` |
 | Run results present, reruns present | `{"test_run": …, "reruns": [ … ]}` | `0` |
 | A `rerun-*` folder has no or unparseable results | that rerun is omitted; `⚠️  Skipping rerun "<name>": …` on stderr, naming whether the file was missing or unreadable | `0` |
