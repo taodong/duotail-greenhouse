@@ -43,5 +43,8 @@ bash "$tests_dir/reset-test-config-smoke.sh"
 echo '== run customize-playwright-config smoke =='
 bash "$tests_dir/customize-playwright-config-smoke.sh"
 
+echo '== run get-test-report smoke =='
+bash "$tests_dir/get-test-report-smoke.sh"
+
 echo 'all smoke checks passed'
 

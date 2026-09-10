@@ -153,6 +153,10 @@ commands read a rerun folder with a `-r` / `--rerun` selector rather than a sepa
 The same selector works on [`get-failure-detail`](#get-failure-detail-usage) and
 [`output-context-variables`](#output-context-variables-usage).
 
+To read the full run and *every* rerun at once instead of selecting one, use
+[`get-test-report`](#get-test-report-usage), which emits them as a single JSON document and
+reports each rerun under the name this selector accepts.
+
 **Names are normalized exactly the way the agent normalizes them** when it creates the folder:
 lower-cased, whitespace runs collapsed to a single `_`, and any other character stripped. So
 `"login flow"`, `"Login Flow"`, and `login_flow` all select `outputs/rerun-login_flow/`.
@@ -288,7 +292,7 @@ rerun-tests
 
 ## run-qa-lib (internal shared library)
 
-`run-qa-lib` is a shared bash library sourced by `run-qa`, `rerun-tests`, `stop-qa`, `stop-rerun`, `check-test-result`, `get-failure-detail`, and `output-context-variables`. It covers two concerns: single-instance session tracking for the two orchestrators, and output-directory resolution for the three readers. It is not intended to be invoked directly.
+`run-qa-lib` is a shared bash library sourced by `run-qa`, `rerun-tests`, `stop-qa`, `stop-rerun`, `check-test-result`, `get-failure-detail`, `output-context-variables`, and `get-test-report`. It covers two concerns: single-instance session tracking for the two orchestrators, and output-directory resolution for the readers. It is not intended to be invoked directly.
 
 It consolidates logic that was previously duplicated across `run-qa` and `stop-qa`:
 
@@ -308,6 +312,7 @@ It consolidates logic that was previously duplicated across `run-qa` and `stop-q
 | `run_qa_session_mode` | Echoes the active session's mode, `run-qa` or `rerun-tests`; a missing or unrecognized record reads as `run-qa` |
 | `run_qa_normalize_rerun_name <name>` | Echoes a rerun name as its folder suffix, a faithful mirror of the agent's normalization (lower-case, whitespace runs to `_`, other characters stripped). A leading `rerun-` is **preserved**, because the agent preserves it; returns `1` if nothing survives |
 | `run_qa_resolve_output_dir <agent_path> <mode> [name]` | Echoes the directory a reader command should read from: `<agent_path>/outputs` for mode `run`, or the named — or most recently modified — `outputs/rerun-*` folder for mode `rerun`. A name that itself begins with `rerun-` is retried without that prefix, but only as a fallback once the literal folder is absent. Returns `1` with a message on stderr when no folder matches |
+| `run_qa_list_rerun_dirs <agent_path>` | Echoes every existing `<agent_path>/outputs/rerun-*` folder, one per line, oldest first by modification time; echoes nothing and returns `0` when there are none. Used by `get-test-report`, which reads them all, rather than resolving a single one |
 
 ---
 
@@ -460,6 +465,87 @@ get-failure-detail -ap /tmp/my-agent
 
 # Custom agent path with API log
 get-failure-detail -ap /tmp/my-agent -d
+```
+
+---
+
+## get-test-report Usage
+
+`get-test-report` prints the full run's results together with every rerun's results as a single JSON document, read from `$AGENT_PATH/outputs/test-results.json` and each `$AGENT_PATH/outputs/rerun-*/test-results.json`. Unlike `check-test-result`, which reads one directory at a time, this command reads them all.
+
+```bash
+get-test-report [-ap <agent-path>] [--list-tests | --list-results]
+```
+
+### Options
+| Option | Description |
+| --- | --- |
+| `-ap <path>` | Override the agent path (default: `/agent`) |
+| `--list-tests` | Instead of the full report, list only the `name` and `file` of each test in the run's `results`. Rerun folders are not read |
+| `--list-results` | Instead of the full report, list only `test_name`, `test_type`, `status` and `exit_condition` for the run and for each rerun |
+| `-h`, `--help`, `h`, `help` | Show usage help |
+
+`--list-tests` and `--list-results` are mutually exclusive; supplying both exits `1`. Repeating the same flag is accepted. An unrecognized option is rejected with exit `1` rather than ignored.
+
+**stdout is always JSON and nothing else.** Every diagnostic — the in-progress error, the not-available error, and per-rerun skip warnings — goes to **stderr**, so `get-test-report | jq …` and `get-test-report > report.json` are always safe.
+
+### Output
+| Condition | stdout | Exit |
+| --- | --- | --- |
+| `run-qa` or `rerun-tests` is currently active | — (message on stderr, naming the mode and PID) | `1` |
+| `outputs/test-results.json` missing or unparseable | — (`ERROR: test report isn't available.` on stderr) | `1` |
+| Run results present, no `rerun-*` folders | `{"test_run": …}`, with **no** `reruns` key | `0` |
+| Run results present, reruns present | `{"test_run": …, "reruns": [ … ]}` | `0` |
+| A `rerun-*` folder has no or unparseable results | that rerun is omitted; `⚠️  Skipping rerun "<name>": no test-results.json` on stderr | `0` |
+
+The `reruns` array is ordered oldest to newest by folder modification time — the same ordering `--rerun` with no name uses to pick the latest, and for the same reason (see [Reading rerun results](#reading-rerun-results)). Each element is `{"name": …, "test_result": …}`, where `name` is the folder's basename without its `rerun-` prefix, i.e. exactly the value to pass to `check-test-result --rerun <name>`.
+
+> **`name` is not `test_name`.** The `name` this command reports is derived from the folder (`rerun-login_flow` → `login_flow`, `rerun-1` → `1`) and is what the `--rerun` selector accepts. The `test_name` *inside* `test-results.json` is the rerun's human-readable identity: the raw, un-normalized `name` from `rerun-config.json` (`login flow`, space included), or the folder basename **with** its prefix (`rerun-1`) when the config supplied no name. A regular run has no `test_name` key at all.
+
+### Simplified output
+
+`--list-tests` reads only the run's `results` array. `file` is the field a rerun config needs — `flow` entries accept `file` and nothing else:
+
+```json
+[
+  { "name": "Test Wikipedia English Language Banner", "file": "test-wikipedia-english.md" },
+  { "name": "Login flow", "file": "test-2.md" }
+]
+```
+
+`--list-results` emits one object per run — the full run first, then each rerun oldest first — carrying only the four run-level fields, in the order the results file stores them. No `results` array from any run is included. Keys absent from the source stay absent rather than being emitted as `null`:
+
+```json
+[
+  { "status": "complete", "exit_condition": "1 test failed", "test_type": "regular" },
+  { "status": "complete", "exit_condition": "all tests passed",
+    "test_type": "rerun", "test_name": "login flow" },
+  { "status": "incomplete", "exit_condition": "1 test failed",
+    "test_type": "rerun", "test_name": "rerun-1" }
+]
+```
+
+The `status` here is the **run-level** `complete`/`incomplete`, not a test's pass/fail — per-test status lives in `results`, which this mode never reads.
+
+### Examples
+```bash
+# Full combined report
+get-test-report
+
+# Which reruns exist, by the name --rerun accepts
+get-test-report | jq -r '.reruns[].name'
+
+# The task filenames available for a rerun-config flow
+get-test-report --list-tests | jq -r '.[].file'
+
+# How the run and each rerun ended
+get-test-report --list-results
+
+# Save the report; warnings stay on stderr and out of the file
+get-test-report > report.json
+
+# Use a custom agent path
+get-test-report -ap /tmp/my-agent
 ```
 
 ---
@@ -1293,12 +1379,13 @@ Use `preset-context` to read and update this file. See [preset-context Usage](#p
 | `/usr/local/bin/stop-rerun`                 | `root:root` | `700` | Cannot execute | Stops the tracked `rerun-tests` process tree              |
 | `/usr/local/bin/check-test-result`          | `root:root` | `700` | Cannot execute | Prints test results or in-progress status                 |
 | `/usr/local/bin/get-failure-detail`         | `root:root` | `700` | Cannot execute | Prints full diagnostic report for the first failed test   |
+| `/usr/local/bin/get-test-report`            | `root:root` | `700` | Cannot execute | Prints the full run and every rerun's results as one JSON document |
 | `/usr/local/bin/output-context-variables`   | `root:root` | `700` | Cannot execute | Prints user-scoped context values from the latest run     |
 | `/usr/local/bin/playwright-mcp`             | `root:root` | `700` | Cannot execute | Playwright MCP launch script                              |
 | `/usr/local/bin/email-mcp`                  | `root:root` | `700` | Cannot execute | Email MCP launch script                                   |
 | `/usr/local/bin/config-agent`               | `root:root` | `700` | Cannot execute | Script to quickly config the agent                        |
 | `/usr/local/bin/config-ai-provider`         | `root:root` | `700` | Cannot execute | Non-interactively applies provider/model/mode settings    |
-| `/usr/local/bin/run-qa-lib`                 | `root:root` | `700` | Cannot execute | Shared library sourced by `run-qa`, `rerun-tests`, `stop-qa`, `stop-rerun`, `check-test-result`, `get-failure-detail`, `output-context-variables` |
+| `/usr/local/bin/run-qa-lib`                 | `root:root` | `700` | Cannot execute | Shared library sourced by `run-qa`, `rerun-tests`, `stop-qa`, `stop-rerun`, `check-test-result`, `get-failure-detail`, `output-context-variables`, `get-test-report` |
 | `/usr/local/bin/file-upload-lib`            | `root:root` | `700` | Cannot execute | Saves stdin content to a target file path |
 | `/usr/local/bin/agent-file-perms-lib`       | `root:root` | `700` | Cannot execute | Shared library that restricts `tasks/`-`instructions/` files to `640` |
 | `/usr/local/bin/manage-global-constants`    | `root:root` | `700` | Cannot execute | Manages entries in `global-context.json`                  |
@@ -1319,6 +1406,7 @@ Use `preset-context` to read and update this file. See [preset-context Usage](#p
 | `stop-rerun`               | ✅ | ❌ | `/usr/local/bin/stop-rerun` (mode `700`)                 |
 | `check-test-result`        | ✅ | ❌ | `/usr/local/bin/check-test-result` (mode `700`)          |
 | `get-failure-detail`       | ✅ | ❌ | `/usr/local/bin/get-failure-detail` (mode `700`)         |
+| `get-test-report`          | ✅ | ❌ | `/usr/local/bin/get-test-report` (mode `700`)            |
 | `output-context-variables` | ✅ | ❌ | `/usr/local/bin/output-context-variables` (mode `700`)   |
 | `config-agent`             | ✅ | ❌ | `/usr/local/bin/config-agent` (mode `700`)               |
 | `config-ai-provider`       | ✅ | ❌ | `/usr/local/bin/config-ai-provider` (mode `700`)         |

@@ -281,3 +281,30 @@ run_qa_resolve_output_dir() {
 
     printf '%s\n' "$dir"
 }
+
+# Echoes every existing "<agent_path>/outputs/rerun-*" folder, one per line,
+# oldest first by mtime. Echoes nothing and returns 0 when there are none.
+#
+# "ls -dtr" is "ls -dt" reversed and behaves the same on GNU and BSD; GNU-only
+# "find -printf" is unusable here because these scripts also run on the host in
+# dev. Ordered by mtime rather than by the numeric suffix, for the reason
+# documented on run_qa_resolve_output_dir: the suffix is the lowest free
+# integer, not a sequence, and named folders carry no number at all.
+run_qa_list_rerun_dirs() {
+    # Split across two "local" statements, exactly as run_qa_resolve_output_dir
+    # does: bash expands every argument of "local" before assigning any of them,
+    # so referring to agent_path on the same line resolves against the enclosing
+    # scope and trips "set -u".
+    local agent_path="$1"
+    local outputs="${agent_path}/outputs" dir
+
+    # An unmatched glob stays literal, so each candidate is tested with -d.
+    # The "|| true" is required under the callers' "set -o pipefail".
+    # shellcheck disable=SC2012 # find -printf is GNU-only; folder names here
+    # are always "rerun-<[a-z0-9_-]+>", so ls is safe and portable.
+    while IFS= read -r dir; do
+        dir="${dir%/}"
+        [ -n "$dir" ] && [ -d "$dir" ] || continue
+        printf '%s\n' "$dir"
+    done < <(ls -dtr "${outputs}"/rerun-*/ 2>/dev/null || true)
+}
