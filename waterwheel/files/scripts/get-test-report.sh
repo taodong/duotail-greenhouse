@@ -1,0 +1,186 @@
+#!/usr/bin/env bash
+# Location: /usr/local/bin/get-test-report
+# Description: Prints the full run's results and every rerun's results as one JSON document.
+set -euo pipefail
+
+AGENT_PATH="${AGENT_PATH:-/agent}"
+_LIB="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+MODE="full"
+
+usage() {
+    cat <<EOF
+Usage: get-test-report [-ap <agent-path>] [--list-tests | --list-results]
+
+Prints the full run's results and every rerun's results as one JSON document.
+
+Options:
+   -ap <agent-path>          Override the agent path (default: \$AGENT_PATH or /agent)
+   --list-tests              Instead of the full report, list only the name and file of
+                             each test in the run's results. Rerun folders are not read.
+   --list-results            Instead of the full report, list only test_name, test_type,
+                             status and exit_condition for the run and each rerun.
+   -h, --help, h, help       Show this help message
+
+--list-tests and --list-results are mutually exclusive.
+EOF
+}
+
+while [[ $# -gt 0 ]]; do
+    case "${1:-}" in
+        -h | --help | h | help)
+            usage
+            exit 0
+            ;;
+        -ap)
+            # Rejects a following flag, not just a missing value: "-ap
+            # --list-tests" would otherwise set AGENT_PATH to "--list-tests" and
+            # report "test report isn't available" -- the same quiet
+            # misinterpretation the unknown-option branch below guards against.
+            if [ -z "${2:-}" ] || [[ "$2" == -* ]]; then
+                echo "ERROR: -ap requires an agent path." >&2
+                exit 1
+            fi
+            AGENT_PATH="$2"
+            shift 2
+            ;;
+        --list-tests | --list-results)
+            # One MODE variable rather than two booleans, so the exclusivity
+            # check is a comparison against what is already set. Repeating the
+            # same flag is harmless; only the conflicting pair is rejected.
+            _requested="${1#--list-}"
+            if [ "$MODE" != "full" ] && [ "$MODE" != "$_requested" ]; then
+                echo "ERROR: --list-tests and --list-results are mutually exclusive." >&2
+                usage >&2
+                exit 1
+            fi
+            MODE="$_requested"
+            shift
+            ;;
+        *)
+            # Rejected rather than ignored: stdout here is machine-read JSON, so
+            # a mistyped flag must not quietly emit a different document.
+            echo "ERROR: unknown option: $1" >&2
+            usage >&2
+            exit 1
+            ;;
+    esac
+done
+
+# Source shared libs co-located with this script (repo scripts/ in dev,
+# /usr/local/bin in the container). The .sh suffix only exists in dev.
+# shellcheck source=run-qa-lib.sh
+for _name in run-qa-lib; do
+  _path="${_LIB}/${_name}"
+  [ -f "${_path}.sh" ] && _path="${_path}.sh"
+  # shellcheck disable=SC1090
+  source "${_path}"
+done
+
+if is_run_qa_active; then
+    echo "ERROR: Testing is in progress ($(run_qa_session_mode) pid: $RUN_QA_ACTIVE_PID). The test report isn't available until the run completes." >&2
+    exit 1
+fi
+
+RESULTS_FILE="${AGENT_PATH}/outputs/test-results.json"
+
+# Returns 0 only when the file holds one JSON object.
+#
+# NOT "jq empty": that exits 0 on a zero-byte or whitespace-only file, because
+# there are no inputs for the filter to run against and so nothing raises an
+# error. An empty file is exactly what a container killed mid-write leaves
+# behind -- the case the guard exists for -- and letting it through produced
+# "test_run": null with exit 0, and empty stdout under --list-tests.
+#
+# The "-s" is what makes "exactly one" true rather than merely claimed. jq
+# accepts a stream of concatenated values, and jq -e reports the truthiness of
+# only the LAST one, so an unslurped "type == \"object\"" passes on "{}{}" -- and
+# even on "[1]{}". Slurping collapses the file to an array whose length is the
+# number of values it holds, so "length == 1" rejects both.
+#
+# That mattered downstream in three different ways: --list-tests ran its filter
+# once per value and emitted several top-level documents (stdout that no strict
+# parser accepts), full mode took $run[0] and silently discarded the rest, and a
+# concatenated rerun file produced two reruns[] entries carrying the SAME name --
+# duplicate keys in what is documented as an index into the other readers.
+#
+# "type == \"object\"" also rejects a file holding a bare null, string or array,
+# none of which writeTestResults can produce. jq -e exits non-zero for all of
+# them: 4 when there is no output at all, 5 on a parse error, 1 when the result
+# was false.
+results_file_is_readable() {
+    [ -f "$1" ] && jq -e -s 'length == 1 and (.[0] | type == "object")' "$1" >/dev/null 2>&1
+}
+
+if ! results_file_is_readable "$RESULTS_FILE"; then
+    echo "ERROR: test report isn't available." >&2
+    exit 1
+fi
+
+# Keeps only the four run-level fields, in source-file order, and drops any the
+# source omits -- a regular run has no test_name, and "no null placeholders" is
+# the convention writeTestResults itself follows. Constructing
+# {test_name, test_type, status, exit_condition} instead would materialize
+# "test_name": null on every regular run.
+RUN_SUMMARY_FILTER='with_entries(select(.key == "test_name" or .key == "test_type" or .key == "status" or .key == "exit_condition"))'
+
+# Echoes the rerun name a folder maps to: its basename without the "rerun-"
+# prefix. This is the value check-test-result --rerun accepts, and is distinct
+# from the file's own test_name, which is the raw un-normalized config name (or
+# the folder basename *with* its prefix for an unnamed rerun).
+rerun_name_of() {
+    local name
+    name="$(basename "$1")"
+    printf '%s\n' "${name#rerun-}"
+}
+
+# Emits one JSON object per rerun that has parseable results, applying $1 as the
+# jq filter; warns on stderr and skips the rest. Always returns 0, so a skipped
+# rerun does not trip pipefail in the pipelines below.
+emit_rerun_docs() {
+    local filter="$1" dir name file
+    while IFS= read -r dir; do
+        name="$(rerun_name_of "$dir")"
+        file="${dir}/test-results.json"
+        if ! results_file_is_readable "$file"; then
+            # Distinguish the two causes: a rerun that died before writing
+            # anything leaves no file, while one killed mid-write leaves an
+            # empty or truncated one. Sending an operator to look for a missing
+            # file when it is present but corrupt wastes the warning.
+            if [ -f "$file" ]; then
+                echo "⚠️  Skipping rerun \"${name}\": unreadable test-results.json" >&2
+            else
+                echo "⚠️  Skipping rerun \"${name}\": no test-results.json" >&2
+            fi
+            continue
+        fi
+        jq --arg name "$name" "$filter" "$file"
+    done < <(run_qa_list_rerun_dirs "$AGENT_PATH")
+    return 0
+}
+
+case "$MODE" in
+    tests)
+        # Only the parent run; rerun folders are never opened. The "// []" guard
+        # keeps a results-less file yielding [] rather than a jq error.
+        jq '[ (.results // [])[] | {name, file} ]' "$RESULTS_FILE"
+        ;;
+    results)
+        {
+            jq "$RUN_SUMMARY_FILTER" "$RESULTS_FILE"
+            emit_rerun_docs "$RUN_SUMMARY_FILTER"
+        } | jq -n '[inputs]'
+        ;;
+    full)
+        # jq -n with "inputs" slurps the piped per-rerun objects, so the whole
+        # document is assembled in a single jq call with no temp file. The
+        # trailing "+ (if ... )" is what omits "reruns" rather than emitting [].
+        # shellcheck disable=SC2016 # "$name" is a jq variable bound by --arg
+        # in emit_rerun_docs, not a shell expansion.
+        emit_rerun_docs '{name: $name, test_result: .}' \
+            | jq -n --slurpfile run "$RESULTS_FILE" '
+                [inputs] as $reruns
+                | {test_run: $run[0]}
+                  + (if ($reruns | length) > 0 then {reruns: $reruns} else {} end)
+            '
+        ;;
+esac
