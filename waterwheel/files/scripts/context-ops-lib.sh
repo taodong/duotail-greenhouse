@@ -100,14 +100,15 @@ cmd_list() {
     jq "$query" "$target_file"
 }
 
-cmd_set() {
-    local target_file="$1"
+# Echoes $1 (a JSON object) with the KEY=value pairs in $2 applied, one setpath
+# per pair. Writes no files: generate-rerun-config composes its "data" object
+# this way, and has no target file to read-modify-write. cmd_set below is the
+# in-place caller and is the only behavior this was extracted from, so the
+# splitter, the quote stripping, the empty-key warning and the
+# CONTEXT_PATH_PREFIX handling are all unchanged from it.
+context_ops_apply_pairs() {
+    local json="$1"
     local pairs_string="$2"
-
-    if [ -z "$pairs_string" ]; then
-        echo "ERROR: set requires key=value pairs (e.g. KEY=val,OTHER=\"quoted val\")." >&2
-        return 1
-    fi
 
     # Parse comma-delimited pairs while respecting double-quoted regions.
     local -a pairs=()
@@ -129,13 +130,8 @@ cmd_set() {
     done
     [[ -n "$current" ]] && pairs+=("$current")
 
-    local json="{}"
-    if [ -f "$target_file" ]; then
-        json=$(cat "$target_file")
-    fi
-
     local pair
-    for pair in "${pairs[@]}"; do
+    for pair in "${pairs[@]+"${pairs[@]}"}"; do
         local key="${pair%%=*}"
         local value="${pair#*=}"
 
@@ -155,6 +151,25 @@ cmd_set() {
         path_json=$(context_ops_build_path_json "$key")
         json=$(printf '%s' "$json" | jq --argjson path "$path_json" --arg v "$value" 'setpath($path; $v)')
     done
+
+    printf '%s' "$json"
+}
+
+cmd_set() {
+    local target_file="$1"
+    local pairs_string="$2"
+
+    if [ -z "$pairs_string" ]; then
+        echo "ERROR: set requires key=value pairs (e.g. KEY=val,OTHER=\"quoted val\")." >&2
+        return 1
+    fi
+
+    local json="{}"
+    if [ -f "$target_file" ]; then
+        json=$(cat "$target_file")
+    fi
+
+    json=$(context_ops_apply_pairs "$json" "$pairs_string")
 
     local dir
     dir=$(dirname "$target_file")

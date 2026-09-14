@@ -46,5 +46,8 @@ bash "$tests_dir/customize-playwright-config-smoke.sh"
 echo '== run get-test-report smoke =='
 bash "$tests_dir/get-test-report-smoke.sh"
 
+echo '== run generate-rerun-config smoke =='
+bash "$tests_dir/generate-rerun-config-smoke.sh"
+
 echo 'all smoke checks passed'
 

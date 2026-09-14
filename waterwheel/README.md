@@ -114,6 +114,16 @@ It takes no options.
    missing.
 
 ```bash
+generate-rerun-config -f test-2.md -f test-5.md \
+  | upload-instruction-file rerun-config.json
+```
+
+[`generate-rerun-config`](#generate-rerun-config-usage) validates every task filename against
+`/agent/tasks` and applies the agent's own `name` rules before emitting anything, so a mistake
+fails there rather than after this command has started the display and the MCP services. Writing
+the JSON by hand works too:
+
+```bash
 printf '{"flow":[{"file":"test-2.md"},{"file":"test-5.md"}]}' \
   | upload-instruction-file rerun-config.json
 ```
@@ -216,7 +226,7 @@ otherwise have no way to find the session.
 run-qa
 
 # Then replay a subset
-printf '{"name":"login flow","flow":[{"file":"test-2.md"}]}' \
+generate-rerun-config -f test-2.md --name "login flow" \
   | upload-instruction-file rerun-config.json
 rerun-tests
 # results land in /agent/outputs/rerun-login_flow/
@@ -504,7 +514,7 @@ The `reruns` array is ordered oldest to newest by folder modification time — t
 
 ### Simplified output
 
-`--list-tests` reads only the run's `results` array. `file` is the field a rerun config needs — `flow` entries accept `file` and nothing else:
+`--list-tests` reads only the run's `results` array. `file` is the field a rerun config needs — `flow` entries accept `file` and nothing else, and each value is accepted verbatim by [`generate-rerun-config -f`](#generate-rerun-config-usage):
 
 ```json
 [
@@ -546,6 +556,79 @@ get-test-report > report.json
 
 # Use a custom agent path
 get-test-report -ap /tmp/my-agent
+```
+
+---
+
+## generate-rerun-config Usage
+
+`generate-rerun-config` composes a `rerun-config.json` document and prints it to stdout. It writes nothing to disk — pipe it to [`upload-instruction-file`](#upload-instruction-file-usage) to install it. It is the write-side counterpart to [`get-test-report --list-tests`](#simplified-output), which lists the task filenames a `flow` can hold.
+
+```bash
+generate-rerun-config [-ap <agent-path>] -f <task-file> [-f <task-file> ...]
+                      [--name <rerun-name>] [--data KEY=value,...] [--data-file <path>]
+```
+
+### Options
+| Option | Description |
+| --- | --- |
+| `-ap <path>` | Override the agent path (default: `/agent`) |
+| `-f`, `--file <name>` | Task file to replay. Repeatable; **the order given is the execution order**. At least one is required |
+| `--name <rerun-name>` | Name the rerun, and with it its output folder. Omitted from the document when not given |
+| `--data KEY=value,...` | Context overrides merged into `data`. Repeatable. Dotted keys nest: `user.name=Ada` → `{"user":{"name":"Ada"}}` |
+| `--data-file <path>` | A JSON file whose top-level object is merged into `data`. Repeatable. Use it for values that are not strings |
+| `-h`, `--help`, `h`, `help` | Show usage help |
+
+**stdout is always JSON and nothing else.** Every diagnostic — errors, the duplicate-file warning, the existing-folder warning, and the folder-name notice — goes to **stderr**, so piping into `upload-instruction-file` is always safe. An unrecognized option is rejected with exit `1` rather than ignored, and a value-taking flag rejects a following flag (`-f --name x`) rather than consuming it.
+
+`name` and `data` are **omitted rather than emitted empty**. Both are optional to the agent, and `"data": {}` would misrepresent a config that overrides nothing.
+
+### Validation
+
+Every task filename is checked against `$AGENT_PATH/tasks` before anything is emitted. This is the point of the command: `rerun-tests` only pre-flights whether the config file *exists*, so an unknown `file`, an illegal `name`, or an occupied output folder otherwise surfaces from the agent **after** the virtual display and both MCP services have started.
+
+| Condition | stdout | Exit |
+| --- | --- | --- |
+| No `-f` given | — (`flow` may not be empty) | `1` |
+| A `-f` value is not a file in `$AGENT_PATH/tasks` | — (error names it and lists the available files) | `1` |
+| A `-f` value contains `/` | — (flow entries are matched by basename) | `1` |
+| `--name` is blank, or normalizes to empty or to a plain number | — (mirrors the agent's own two rules) | `1` |
+| `--data-file` is missing, unparseable, or is not exactly one JSON object | — | `1` |
+| A `-f` value is repeated | the document, with the repeat kept | `0` (warning on stderr) |
+| `outputs/rerun-<normalized>/` already exists | the document | `0` (warning on stderr) |
+| Otherwise | `{"name"?: …, "flow": [ … ], "data"?: { … }}` | `0` |
+
+A repeated `-f` is kept because replaying one task twice in a flow is legal; it warns because a repeat is more often a typo. An existing rerun folder is fatal to `rerun-tests` but only a warning here — you may be about to remove it, and this command's exit status does not depend on output state it does not own.
+
+**`--name` is normalized by the agent** to form the folder name: lower-cased, whitespace runs collapsed to `_`, and every other character stripped. `--name "Login Flow"` writes `"name": "login flow"` — the raw value — but produces `outputs/rerun-login_flow/`. Because that is lossy, the resolved folder is reported on stderr. A name that normalizes to nothing (`"!!!"`) or to a plain number (`"12"`, which would collide in form with the auto-numbered `rerun-N` scheme) is rejected here rather than by the agent. A name beginning with `-` cannot be passed at all, since every value-taking flag rejects a `-`-prefixed value rather than consuming it; write such a config by hand if you need one. See [Reading rerun results](#reading-rerun-results) for how the two forms are used afterwards.
+
+### `data` precedence
+
+Sources are applied in this order, so the command line wins over a file: every `--data-file` first, in the order given, then every `--data`. Repeating either flag accumulates, with later occurrences overriding earlier ones.
+
+`--data` values are always strings. Use `--data-file` for numbers, booleans, arrays, or nested objects — `data` values are unvalidated by the agent, so any JSON is legal. Key parsing matches [`preset-context variables set`](#preset-context-usage) exactly: case-sensitive, comma-delimited, values optionally double-quoted, dotted keys consolidated into nested objects.
+
+### Examples
+```bash
+# Minimal
+generate-rerun-config -f test-2.md
+
+# Named rerun, two tasks, context overrides, installed in one line
+generate-rerun-config -f test-2.md -f test-5.md --name "login flow" \
+  --data user_email=qa+rerun@example.com \
+  | upload-instruction-file rerun-config.json
+
+# Which task filenames are available for a flow
+get-test-report --list-tests | jq -r '.[].file'
+
+# Non-string values (numbers, arrays, nested objects) come from a file
+generate-rerun-config -f test-2.md --data-file ./overrides.json
+
+# Preview without installing
+generate-rerun-config -f test-2.md --name nightly | jq .
+
+# Use a custom agent path
+generate-rerun-config -ap /tmp/my-agent -f test-2.md
 ```
 
 ---
