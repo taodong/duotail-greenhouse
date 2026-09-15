@@ -100,14 +100,15 @@ cmd_list() {
     jq "$query" "$target_file"
 }
 
-cmd_set() {
-    local target_file="$1"
+# Echoes $1 (a JSON object) with the KEY=value pairs in $2 applied, one setpath
+# per pair. Writes no files: generate-rerun-config composes its "data" object
+# this way, and has no target file to read-modify-write. cmd_set below is the
+# in-place caller and is the only behavior this was extracted from, so the
+# splitter, the quote stripping, the empty-key warning and the
+# CONTEXT_PATH_PREFIX handling are all unchanged from it.
+context_ops_apply_pairs() {
+    local json="$1"
     local pairs_string="$2"
-
-    if [ -z "$pairs_string" ]; then
-        echo "ERROR: set requires key=value pairs (e.g. KEY=val,OTHER=\"quoted val\")." >&2
-        return 1
-    fi
 
     # Parse comma-delimited pairs while respecting double-quoted regions.
     local -a pairs=()
@@ -129,13 +130,13 @@ cmd_set() {
     done
     [[ -n "$current" ]] && pairs+=("$current")
 
-    local json="{}"
-    if [ -f "$target_file" ]; then
-        json=$(cat "$target_file")
-    fi
-
     local pair
-    for pair in "${pairs[@]}"; do
+    for pair in "${pairs[@]+"${pairs[@]}"}"; do
+        if [[ "$pair" != *=* ]]; then
+            echo "ERROR: expected KEY=value pair: $pair" >&2
+            return 1
+        fi
+
         local key="${pair%%=*}"
         local value="${pair#*=}"
 
@@ -151,10 +152,45 @@ cmd_set() {
             value="${value%\"}"
         fi
 
-        local path_json
+        local path_json updated
         path_json=$(context_ops_build_path_json "$key")
-        json=$(printf '%s' "$json" | jq --argjson path "$path_json" --arg v "$value" 'setpath($path; $v)')
+        # Checked rather than assigned straight through. jq fails here whenever
+        # the dotted path collides with an existing non-object value
+        # (user="ada" then user.name=Ada), and when the target file already
+        # holds malformed JSON. Letting that through would leave "$json" empty,
+        # and the caller would then write an empty document over a good file.
+        if ! updated=$(printf '%s' "$json" | jq --argjson path "$path_json" --arg v "$value" 'setpath($path; $v)') \
+            || [ -z "$updated" ]; then
+            echo "ERROR: cannot set \"$key\": the path collides with an existing non-object value, or the document is malformed." >&2
+            return 1
+        fi
+        json="$updated"
     done
+
+    printf '%s' "$json"
+}
+
+cmd_set() {
+    local target_file="$1"
+    local pairs_string="$2"
+
+    if [ -z "$pairs_string" ]; then
+        echo "ERROR: set requires key=value pairs (e.g. KEY=val,OTHER=\"quoted val\")." >&2
+        return 1
+    fi
+
+    local json="{}"
+    if [ -f "$target_file" ]; then
+        json=$(cat "$target_file")
+    fi
+
+    # Must be checked: the substitution runs in a subshell, so a failure inside
+    # it does not trip the caller's "set -e", and an unchecked assignment would
+    # truncate the target file to zero bytes while still reporting "Updated".
+    if ! json=$(context_ops_apply_pairs "$json" "$pairs_string") || [ -z "$json" ]; then
+        echo "ERROR: $target_file left unchanged." >&2
+        return 1
+    fi
 
     local dir
     dir=$(dirname "$target_file")

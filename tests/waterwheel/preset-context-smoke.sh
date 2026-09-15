@@ -49,3 +49,33 @@ bash "$scripts/manage-global-constants.sh" -ap "$agent" delete user.name
 echo '== global constants after delete =='
 bash "$scripts/manage-global-constants.sh" -ap "$agent" list
 
+
+# A failing setpath must leave the target file alone. jq fails whenever a dotted
+# key collides with an existing non-object value, or the file already holds
+# malformed JSON. When that failure went unchecked, cmd_set wrote an empty
+# document over a good file and still reported "Updated", exiting 0.
+echo '== a colliding dotted key leaves the file unchanged =='
+printf '{"BASE_URL":"https://x","user":"ada"}' > "$agent/instructions/global-context.json"
+before=$(cat "$agent/instructions/global-context.json")
+if bash "$scripts/manage-global-constants.sh" -ap "$agent" set 'user.name=Ada' 2>/dev/null; then
+  echo 'expected a colliding dotted key to fail' >&2
+  exit 1
+fi
+after=$(cat "$agent/instructions/global-context.json")
+if [ "$before" != "$after" ]; then
+  echo "expected the file to be untouched, got: $after" >&2
+  exit 1
+fi
+echo 'file preserved as expected'
+
+echo '== a malformed target file is not overwritten =='
+printf 'not json' > "$agent/instructions/global-context.json"
+if bash "$scripts/manage-global-constants.sh" -ap "$agent" set 'A=1' 2>/dev/null; then
+  echo 'expected a malformed target file to fail' >&2
+  exit 1
+fi
+if [ "$(cat "$agent/instructions/global-context.json")" != 'not json' ]; then
+  echo 'expected the malformed file to be left alone' >&2
+  exit 1
+fi
+echo 'malformed file preserved as expected'

@@ -5,22 +5,26 @@ set -euo pipefail
 
 AGENT_PATH="${AGENT_PATH:-/agent}"
 FILENAME=""
+ALLOW_EMPTY=0
 
 usage() {
   cat <<EOF
-Usage: $(basename "$0") [-ap <agent-path>] <filename>
+Usage: $(basename "$0") [-ap <agent-path>] [--allow-empty] <filename>
 
 Reads content from stdin and writes it to \$AGENT_PATH/instructions/<filename>,
 creating the file or replacing it if it already exists.
 
 Options:
   -ap, --agent-path <path>   Override agent path (default: /agent)
+  --allow-empty              Permit empty stdin (writes a zero-byte file)
   -h, --help, h, help        Show this help message
 
 Notes:
   - <filename> is appended to \$AGENT_PATH/instructions to form the full path.
   - Missing parent directories are created automatically.
   - A warning is printed when replacing an existing file.
+  - Empty stdin is rejected and any existing file is left unchanged, so a
+    failed producing command in a pipe cannot silently blank the file.
 
 Examples:
   printf 'allowed:\n  - http://host.docker.internal:8080\n' | \\
@@ -34,6 +38,10 @@ while [[ $# -gt 0 ]]; do
     -ap|--agent-path)
       AGENT_PATH="${2:?--agent-path requires a value}"
       shift 2
+      ;;
+    --allow-empty)
+      ALLOW_EMPTY=1
+      shift
       ;;
     -h|--help|h|help)
       usage
@@ -78,5 +86,9 @@ for _name in file-upload-lib agent-file-perms-lib; do
   source "${_path}"
 done
 
-cmd_upload "$TARGET_FILE"
+if [[ "$ALLOW_EMPTY" -eq 1 ]]; then
+  cmd_upload --allow-empty "$TARGET_FILE"
+else
+  cmd_upload "$TARGET_FILE"
+fi
 enforce_managed_file_perms "$TARGET_FILE"
