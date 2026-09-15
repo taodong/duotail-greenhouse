@@ -61,17 +61,30 @@ echo '== name normalization matches the agent, case for case =='
 # predicts on stderr must be the folder rerun-qa actually creates.
 while IFS='|' read -r raw expected; do
   [ -n "$raw" ] || continue
-  raw=$(printf '%b' "$raw")   # let \n in the table denote a real newline
-  bash "$script" -ap "$agent" -f test-2.md --name "$raw" > /dev/null 2> "$tmpdir/norm.err" \
-    || fail "expected --name \"$raw\" to be accepted"
-  got=$(sed -n 's/.*outputs\/rerun-\(.*\)\/.*/\1/p' "$tmpdir/norm.err")
-  [ "$got" = "$expected" ] \
-    || fail "normalization drift for \"$raw\": expected \"$expected\", got \"$got\""
+  raw=$(printf '%b' "$raw")   # \n and \xHH in the table denote real bytes
+  # Both locales: tr's [:space:] is locale-dependent, the dev host is UTF-8 and
+  # the image sets no locale, so a UTF-8-only check would miss the C-locale case
+  # entirely -- which is exactly how the Unicode-space drift got in.
+  for loc in "${LANG:-C.UTF-8}" C; do
+    LC_ALL="$loc" bash "$script" -ap "$agent" -f test-2.md --name "$raw" \
+      > /dev/null 2> "$tmpdir/norm.err" \
+      || fail "expected --name \"$raw\" to be accepted (LC_ALL=$loc)"
+    got=$(sed -n 's/.*outputs\/rerun-\(.*\)\/.*/\1/p' "$tmpdir/norm.err")
+    [ "$got" = "$expected" ] \
+      || fail "normalization drift for \"$raw\" (LC_ALL=$loc): expected \"$expected\", got \"$got\""
+  done
 done <<'CASES'
 login flow|login_flow
 Login Flow|login_flow
   padded  name  |padded_name
 ab\ncd|ab_cd
+a\xc2\xa0b|a_b
+a\xe3\x80\x80b|a_b
+a\xe2\x80\x89b|a_b
+a\xe2\x80\xafb|a_b
+a\xef\xbb\xbfb|a_b
+a\xe1\x9a\x80b|a_b
+\xc2\xa0padded\xc2\xa0|padded
 Nightly Run #3|nightly_run_3
 login__flow|login__flow
 a-b_c|a-b_c

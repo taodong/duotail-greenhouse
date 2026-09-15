@@ -195,6 +195,32 @@ run_qa_session_mode() {
 # Returns 1 when nothing survives normalization.
 run_qa_normalize_rerun_name() {
     local name="$1"
+    local ws
+
+    # JavaScript's \s matches Unicode whitespace well beyond ASCII, and whether
+    # tr's [:space:] matches any of it depends on the locale -- which neither the
+    # Dockerfile nor the base image sets. Under a UTF-8 locale tr happens to
+    # agree; under the C locale it does not, and "a<NBSP>b" normalized to "ab"
+    # here while the agent produced "a_b". Every caller that predicts a folder
+    # from a name was then pointing at a directory the agent never creates.
+    #
+    # Map each non-ASCII character in JS's \s set to a plain space up front, as
+    # literal UTF-8 byte sequences: ${var//"$ws"/ } substitutes bytes and is
+    # unaffected by the locale, so everything below only ever sees ASCII
+    # whitespace and behaves identically everywhere. Deliberately NOT done by
+    # forcing LC_ALL=C over the whole function -- that would make tr's
+    # [:upper:]/[:lower:] ASCII-only and lose the Unicode case folding that
+    # currently agrees with the agent (U+0130 -> "i", U+212A -> "k").
+    #
+    # \xHH rather than \uXXXX: the dev host runs bash 3.2, which predates \u.
+    for ws in $'\xc2\xa0' $'\xe1\x9a\x80' \
+              $'\xe2\x80\x80' $'\xe2\x80\x81' $'\xe2\x80\x82' $'\xe2\x80\x83' \
+              $'\xe2\x80\x84' $'\xe2\x80\x85' $'\xe2\x80\x86' $'\xe2\x80\x87' \
+              $'\xe2\x80\x88' $'\xe2\x80\x89' $'\xe2\x80\x8a' \
+              $'\xe2\x80\xa8' $'\xe2\x80\xa9' $'\xe2\x80\xaf' \
+              $'\xe2\x81\x9f' $'\xe3\x80\x80' $'\xef\xbb\xbf'; do
+        name="${name//"$ws"/ }"
+    done
 
     # Trim surrounding whitespace.
     name="${name#"${name%%[![:space:]]*}"}"

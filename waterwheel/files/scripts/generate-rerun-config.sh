@@ -194,8 +194,11 @@ if [ "$NAME_GIVEN" -eq 1 ]; then
 
     # run_qa_normalize_rerun_name is the repo's single mirror of the agent's
     # normalizeRerunName, and returns 1 when nothing survives. Reused rather
-    # than reimplemented: a sed-based copy is line-oriented and would leave a
-    # newline uncollapsed, predicting a folder the agent never creates.
+    # than reimplemented -- mirroring a JS Unicode function in shell is subtle
+    # enough that one copy is all this repo should own. A sed-based copy was
+    # line-oriented and left a newline uncollapsed, and matching JS's \s also
+    # means handling the Unicode spaces tr's [:space:] misses under the C
+    # locale. Both predicted folders the agent never creates.
     if ! NORMALIZED="$(run_qa_normalize_rerun_name "$NAME")"; then
         echo "ERROR: --name normalizes to an empty string: \"$NAME\"" >&2
         echo "       Names keep only a-z, 0-9, \"_\" and \"-\"; everything else is stripped." >&2
