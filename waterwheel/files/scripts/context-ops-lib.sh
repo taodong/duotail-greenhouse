@@ -132,6 +132,11 @@ context_ops_apply_pairs() {
 
     local pair
     for pair in "${pairs[@]+"${pairs[@]}"}"; do
+        if [[ "$pair" != *=* ]]; then
+            echo "ERROR: expected KEY=value pair: $pair" >&2
+            return 1
+        fi
+
         local key="${pair%%=*}"
         local value="${pair#*=}"
 
