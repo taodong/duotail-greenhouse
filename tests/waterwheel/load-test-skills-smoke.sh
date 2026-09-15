@@ -92,6 +92,38 @@ if printf 'x\n' | bash "$script" -z -name name; then
   exit 1
 fi
 
+echo '== a rejected empty upload does not poison the skill name =='
+# The skill folder is created before stdin is validated. Left behind, it made
+# load-test-skills treat the skill as already loaded, so the RETRY skipped the
+# write and still exited 0 -- the skill silently did not exist.
+if printf '' | bash "$script" -ap "$agent" -name poisoned 2>/dev/null; then
+  echo 'expected empty stdin to be rejected' >&2
+  exit 1
+fi
+if [ -e "$agent/skills/poisoned" ]; then
+  echo 'expected the skill folder to be rolled back' >&2
+  exit 1
+fi
+
+echo '== and the retry with real content succeeds =='
+printf '# real skill\n' | bash "$script" -ap "$agent" -name poisoned > /dev/null
+if ! grep -Fq '# real skill' "$agent/skills/poisoned/SKILL.md"; then
+  echo 'expected the retry to write the skill' >&2
+  exit 1
+fi
+
+echo '== a failed overwrite leaves an existing skill folder intact =='
+# The rollback must never touch a directory this upload did not create.
+printf '# keep me\n' | bash "$script" -ap "$agent" -name keeper > /dev/null
+if printf '' | bash "$script" -ap "$agent" -name keeper --force 2>/dev/null; then
+  echo 'expected empty stdin to be rejected on overwrite' >&2
+  exit 1
+fi
+if ! grep -Fq '# keep me' "$agent/skills/keeper/SKILL.md"; then
+  echo 'expected the existing skill to survive a failed overwrite' >&2
+  exit 1
+fi
+
 echo '== help option prints usage =='
 help_output=$(bash "$script" -h)
 printf '%s\n' "$help_output" | grep -Fq 'Usage: load-test-skills.sh'

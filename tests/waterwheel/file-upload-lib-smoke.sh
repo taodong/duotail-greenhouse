@@ -58,6 +58,57 @@ if [ -n "$leftover" ]; then
   exit 1
 fi
 
+echo '== a rejected upload rolls back only the directories it created =='
+nested="$tmpdir/existing/made/deeper/out.txt"
+mkdir -p "$tmpdir/existing"
+if printf '' | bash "$lib" "$nested" 2>/dev/null; then
+  echo 'expected empty stdin to be rejected' >&2
+  exit 1
+fi
+if [ -e "$tmpdir/existing/made" ]; then
+  echo 'expected the created directories to be rolled back' >&2
+  exit 1
+fi
+if [ ! -d "$tmpdir/existing" ]; then
+  echo 'expected the pre-existing ancestor to survive' >&2
+  exit 1
+fi
+
+echo '== rollback never removes a directory holding other content =='
+sibling="$tmpdir/shared/out.txt"
+mkdir -p "$tmpdir/shared"
+printf 'keep me\n' > "$tmpdir/shared/other.txt"
+if printf '' | bash "$lib" "$sibling" 2>/dev/null; then
+  echo 'expected empty stdin to be rejected' >&2
+  exit 1
+fi
+if [ ! -f "$tmpdir/shared/other.txt" ]; then
+  echo 'expected unrelated content to survive' >&2
+  exit 1
+fi
+
+echo '== rollback refuses a directory that is not empty =='
+# rmdir, not "rm -r": if anything landed inside a directory this upload created,
+# the rollback leaves it alone. Exercised against the helper directly -- reaching
+# that state through the CLI would take a concurrent writer.
+# shellcheck disable=SC1090
+source "$lib"
+mkdir -p "$tmpdir/rb/created"
+printf 'x\n' > "$tmpdir/rb/created/unexpected.txt"
+file_upload_rollback_dirs "$tmpdir/rb/created" "$tmpdir/rb/created"
+if [ ! -f "$tmpdir/rb/created/unexpected.txt" ]; then
+  echo 'expected rollback to refuse a non-empty directory' >&2
+  exit 1
+fi
+
+echo '== rollback is a no-op when the upload created nothing =='
+mkdir -p "$tmpdir/rb/untouched"
+file_upload_rollback_dirs "$tmpdir/rb/untouched" ""
+if [ ! -d "$tmpdir/rb/untouched" ]; then
+  echo 'expected no rollback without a recorded created root' >&2
+  exit 1
+fi
+
 echo '== --allow-empty writes a zero-byte file on purpose =='
 blank="$tmpdir/blank.txt"
 printf '' | bash "$lib" --allow-empty "$blank"

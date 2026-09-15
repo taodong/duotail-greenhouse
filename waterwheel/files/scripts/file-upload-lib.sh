@@ -24,11 +24,31 @@ Examples:
 EOF
 }
 
+# Removes the directories one upload created, deepest first, stopping at the
+# first that is not empty and never going above the topmost one it created.
+#
+# rmdir, not "rm -r": rmdir refuses a non-empty directory, so a rollback can
+# never remove content that was already there. A directory the upload did not
+# create is never passed in at all -- "$root" is empty in that case.
+file_upload_rollback_dirs() {
+    local dir="${1:-}" root="${2:-}"
+
+    [ -n "$root" ] || return 0
+
+    while [ -n "$dir" ]; do
+        rmdir "$dir" 2>/dev/null || return 0
+        [ "$dir" = "$root" ] && return 0
+        dir="$(dirname "$dir")"
+    done
+}
+
 file_upload_from_stdin() {
     local path="$1"
     local allow_empty="${2:-0}"
     local parent_dir
     local temp_file
+    local created_root=""
+    local ancestor
 
     if [ -z "$path" ]; then
         echo "ERROR: missing required path argument." >&2
@@ -43,6 +63,19 @@ file_upload_from_stdin() {
 
     parent_dir="$(dirname "$path")"
     if [ ! -d "$parent_dir" ]; then
+        # Record the topmost directory that does not exist yet, so a failed
+        # upload rolls back exactly what it created and nothing else. Without
+        # this, a rejected upload left the destination directory behind -- and
+        # load-test-skills treats an existing skill folder as already loaded,
+        # so the retry skipped the write and still exited 0.
+        created_root="$parent_dir"
+        while : ; do
+            ancestor="$(dirname "$created_root")"
+            [ "$ancestor" = "$created_root" ] && break
+            [ -d "$ancestor" ] && break
+            created_root="$ancestor"
+        done
+
         if ! mkdir -p "$parent_dir"; then
             echo "ERROR: failed to create parent directory: $parent_dir" >&2
             return 1
@@ -59,7 +92,7 @@ file_upload_from_stdin() {
     # scope, so the bare form is an unbound variable under the caller's "set -u"
     # -- which leaked a shell error onto every failure path, not just this
     # function's own return.
-    trap 'rm -f "${temp_file:-}"' RETURN
+    trap 'rm -f "${temp_file:-}"; file_upload_rollback_dirs "${parent_dir:-}" "${created_root:-}"' RETURN
 
     if ! cat > "$temp_file"; then
         echo "ERROR: failed to read stdin content for: $path" >&2
@@ -79,6 +112,7 @@ file_upload_from_stdin() {
         echo "       If the content came from a pipe, check that the producing command succeeded." >&2
         echo "       Pass --allow-empty to write an empty file deliberately." >&2
         rm -f "$temp_file"
+        file_upload_rollback_dirs "$parent_dir" "$created_root"
         trap - RETURN
         return 1
     fi

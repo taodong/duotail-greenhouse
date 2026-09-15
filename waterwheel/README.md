@@ -1094,7 +1094,7 @@ upload-instruction-file [-ap <agent-path>] [--allow-empty] <filename>
 ### Behavior
 - Content is read from stdin and written to `$AGENT_PATH/instructions/<filename>`.
 - Missing parent directories are created automatically (e.g. a nested `<filename>`).
-- **Empty stdin is rejected** with exit `1`, and any existing file is left byte-for-byte unchanged. A command that fails writes nothing and exits non-zero, but a pipeline reports its *last* command's status — so without this, `some-generator | upload-instruction-file config.json` would report success while blanking a working config. Pass `--allow-empty` to write a zero-byte file deliberately. The same guard applies to [`upload-test-task`](#upload-test-task-usage) and `load-test-skills`, which share `file-upload-lib`; neither exposes the flag, since an empty test task or skill file has no meaning.
+- **Empty stdin is rejected** with exit `1`, and any existing file is left byte-for-byte unchanged. Any directory the rejected upload created is rolled back too — otherwise the leftover directory would make `load-test-skills` treat the skill as already loaded and silently skip the retry. A command that fails writes nothing and exits non-zero, but a pipeline reports its *last* command's status — so without this, `some-generator | upload-instruction-file config.json` would report success while blanking a working config. Pass `--allow-empty` to write a zero-byte file deliberately. The same guard applies to [`upload-test-task`](#upload-test-task-usage) and `load-test-skills`, which share `file-upload-lib`; neither exposes the flag, since an empty test task or skill file has no meaning.
 - An existing file is replaced, and a `WARNING` is printed to stderr when it is.
 
 ### Examples
