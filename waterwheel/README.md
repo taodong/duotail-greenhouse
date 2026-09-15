@@ -581,7 +581,7 @@ generate-rerun-config [-ap <agent-path>] -f <task-file> [-f <task-file> ...]
 
 **stdout is always JSON and nothing else.** Every diagnostic — errors, the duplicate-file warning, the existing-folder warning, and the folder-name notice — goes to **stderr**, so no diagnostic can corrupt a piped document.
 
-> **A pipe does not stop on failure.** On a validation error this command exits non-zero with *empty* stdout, but a pipeline's exit status is its **last** command's, and `upload-instruction-file` accepts empty stdin. So `generate-rerun-config … | upload-instruction-file rerun-config.json` reports success and installs a **zero-byte** config, destroying a working one — and because `rerun-tests` only pre-flights that the file *exists*, it then starts the display and both MCP services before dying on it. Capture first when the existing config matters:
+> **A pipe does not stop on failure — the upload does.** On a validation error this command exits non-zero with *empty* stdout, but a pipeline's exit status is its **last** command's. [`upload-instruction-file`](#upload-instruction-file-usage) therefore rejects empty stdin and leaves any existing file untouched, so a failed generation cannot blank a working config. The pipeline still reports the upload's exit status, so check it, or capture first when you want the generator's own:
 >
 > ```bash
 > cfg=$(generate-rerun-config -f test-2.md) \
@@ -1081,18 +1081,20 @@ customize-playwright-config --clear
 `upload-instruction-file` creates or replaces a file under `$AGENT_PATH/instructions` using content read from stdin. The `<filename>` argument is appended to `$AGENT_PATH/instructions` to form the full target path (it is passed to `file-upload-lib`). This is a convenient way to push instruction/config files (e.g. `allowed-domains.yaml`, `email-permissions.yaml`, `extra-instructions.md`) into the agent without editing files in place.
 
 ```bash
-upload-instruction-file [-ap <agent-path>] <filename>
+upload-instruction-file [-ap <agent-path>] [--allow-empty] <filename>
 ```
 
 ### Options
 | Option | Description |
 | --- | --- |
 | `-ap <path>` | Override the agent path (default: `/agent`) |
+| `--allow-empty` | Permit empty stdin, writing a zero-byte file |
 | `-h`, `--help`, `h`, `help` | Show usage help |
 
 ### Behavior
 - Content is read from stdin and written to `$AGENT_PATH/instructions/<filename>`.
 - Missing parent directories are created automatically (e.g. a nested `<filename>`).
+- **Empty stdin is rejected** with exit `1`, and any existing file is left byte-for-byte unchanged. A command that fails writes nothing and exits non-zero, but a pipeline reports its *last* command's status — so without this, `some-generator | upload-instruction-file config.json` would report success while blanking a working config. Pass `--allow-empty` to write a zero-byte file deliberately. The same guard applies to [`upload-test-task`](#upload-test-task-usage) and `load-test-skills`, which share `file-upload-lib`; neither exposes the flag, since an empty test task or skill file has no meaning.
 - An existing file is replaced, and a `WARNING` is printed to stderr when it is.
 
 ### Examples

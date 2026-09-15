@@ -58,6 +58,40 @@ if printf 'x\n' | bash "$script" -z name.txt; then
   exit 1
 fi
 
+echo '== empty stdin is rejected, leaving a working config in place =='
+printf '{"flow":[{"file":"test-2.md"}]}' | bash "$script" -ap "$agent" rerun-config.json > /dev/null
+good=$(cat "$agent/instructions/rerun-config.json")
+if printf '' | bash "$script" -ap "$agent" rerun-config.json 2>/dev/null; then
+  echo 'expected empty stdin to be rejected' >&2
+  exit 1
+fi
+if [ "$(cat "$agent/instructions/rerun-config.json")" != "$good" ]; then
+  echo 'expected the existing config to survive' >&2
+  exit 1
+fi
+
+echo '== the rejection carries no shell error of its own =='
+# The lib's RETURN trap fires after its locals are out of scope. Unguarded,
+# "$temp_file" is then an unbound variable under this script's "set -u" -- which
+# only shows up when the lib is SOURCED, never when it is run directly.
+reject_err=$(printf '' | bash "$script" -ap "$agent" rerun-config.json 2>&1 >/dev/null || true)
+if printf '%s\n' "$reject_err" | grep -Fq 'unbound variable'; then
+  echo "unexpected shell error on the rejection path: $reject_err" >&2
+  exit 1
+fi
+if ! printf '%s\n' "$reject_err" | grep -Fq 'refusing to write empty content'; then
+  echo 'expected the refusal message' >&2
+  exit 1
+fi
+
+echo '== --allow-empty still permits a deliberate blank =='
+printf '' | bash "$script" -ap "$agent" --allow-empty extra-instructions.md > /dev/null
+if [ ! -f "$agent/instructions/extra-instructions.md" ] \
+   || [ -s "$agent/instructions/extra-instructions.md" ]; then
+  echo 'expected --allow-empty to write a zero-byte file' >&2
+  exit 1
+fi
+
 echo '== help option prints usage =='
 help_output=$(bash "$script" -h)
 printf '%s\n' "$help_output" | grep -Fq 'Usage: upload-instruction-file.sh'
