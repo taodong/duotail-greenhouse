@@ -147,9 +147,19 @@ context_ops_apply_pairs() {
             value="${value%\"}"
         fi
 
-        local path_json
+        local path_json updated
         path_json=$(context_ops_build_path_json "$key")
-        json=$(printf '%s' "$json" | jq --argjson path "$path_json" --arg v "$value" 'setpath($path; $v)')
+        # Checked rather than assigned straight through. jq fails here whenever
+        # the dotted path collides with an existing non-object value
+        # (user="ada" then user.name=Ada), and when the target file already
+        # holds malformed JSON. Letting that through would leave "$json" empty,
+        # and the caller would then write an empty document over a good file.
+        if ! updated=$(printf '%s' "$json" | jq --argjson path "$path_json" --arg v "$value" 'setpath($path; $v)') \
+            || [ -z "$updated" ]; then
+            echo "ERROR: cannot set \"$key\": the path collides with an existing non-object value, or the document is malformed." >&2
+            return 1
+        fi
+        json="$updated"
     done
 
     printf '%s' "$json"
@@ -169,7 +179,13 @@ cmd_set() {
         json=$(cat "$target_file")
     fi
 
-    json=$(context_ops_apply_pairs "$json" "$pairs_string")
+    # Must be checked: the substitution runs in a subshell, so a failure inside
+    # it does not trip the caller's "set -e", and an unchecked assignment would
+    # truncate the target file to zero bytes while still reporting "Updated".
+    if ! json=$(context_ops_apply_pairs "$json" "$pairs_string") || [ -z "$json" ]; then
+        echo "ERROR: $target_file left unchanged." >&2
+        return 1
+    fi
 
     local dir
     dir=$(dirname "$target_file")

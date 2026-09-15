@@ -579,7 +579,16 @@ generate-rerun-config [-ap <agent-path>] -f <task-file> [-f <task-file> ...]
 | `--data-file <path>` | A JSON file whose top-level object is merged into `data`. Repeatable. Use it for values that are not strings |
 | `-h`, `--help`, `h`, `help` | Show usage help |
 
-**stdout is always JSON and nothing else.** Every diagnostic — errors, the duplicate-file warning, the existing-folder warning, and the folder-name notice — goes to **stderr**, so piping into `upload-instruction-file` is always safe. An unrecognized option is rejected with exit `1` rather than ignored, and a value-taking flag rejects a following flag (`-f --name x`) rather than consuming it.
+**stdout is always JSON and nothing else.** Every diagnostic — errors, the duplicate-file warning, the existing-folder warning, and the folder-name notice — goes to **stderr**, so no diagnostic can corrupt a piped document.
+
+> **A pipe does not stop on failure.** On a validation error this command exits non-zero with *empty* stdout, but a pipeline's exit status is its **last** command's, and `upload-instruction-file` accepts empty stdin. So `generate-rerun-config … | upload-instruction-file rerun-config.json` reports success and installs a **zero-byte** config, destroying a working one — and because `rerun-tests` only pre-flights that the file *exists*, it then starts the display and both MCP services before dying on it. Capture first when the existing config matters:
+>
+> ```bash
+> cfg=$(generate-rerun-config -f test-2.md) \
+>   && printf '%s\n' "$cfg" | upload-instruction-file rerun-config.json
+> ```
+
+An unrecognized option is rejected with exit `1` rather than ignored, and a value-taking flag rejects a following flag (`-f --name x`) rather than consuming it.
 
 `name` and `data` are **omitted rather than emitted empty**. Both are optional to the agent, and `"data": {}` would misrepresent a config that overrides nothing.
 
@@ -600,7 +609,7 @@ Every task filename is checked against `$AGENT_PATH/tasks` before anything is em
 
 A repeated `-f` is kept because replaying one task twice in a flow is legal; it warns because a repeat is more often a typo. An existing rerun folder is fatal to `rerun-tests` but only a warning here — you may be about to remove it, and this command's exit status does not depend on output state it does not own.
 
-**`--name` is normalized by the agent** to form the folder name: lower-cased, whitespace runs collapsed to `_`, and every other character stripped. `--name "Login Flow"` writes `"name": "login flow"` — the raw value — but produces `outputs/rerun-login_flow/`. Because that is lossy, the resolved folder is reported on stderr. A name that normalizes to nothing (`"!!!"`) or to a plain number (`"12"`, which would collide in form with the auto-numbered `rerun-N` scheme) is rejected here rather than by the agent. A name beginning with `-` cannot be passed at all, since every value-taking flag rejects a `-`-prefixed value rather than consuming it; write such a config by hand if you need one. See [Reading rerun results](#reading-rerun-results) for how the two forms are used afterwards.
+**`--name` is normalized by the agent** to form the folder name: lower-cased, whitespace runs collapsed to `_`, and every other character stripped. `--name "Login Flow"` writes `"name": "Login Flow"` — the raw value, verbatim — but produces `outputs/rerun-login_flow/`. Because that is lossy, the resolved folder is reported on stderr. A name that normalizes to nothing (`"!!!"`) or to a plain number (`"12"`, which would collide in form with the auto-numbered `rerun-N` scheme) is rejected here rather than by the agent. A name beginning with `-` cannot be passed at all, since every value-taking flag rejects a `-`-prefixed value rather than consuming it; write such a config by hand if you need one. See [Reading rerun results](#reading-rerun-results) for how the two forms are used afterwards.
 
 ### `data` precedence
 
@@ -613,10 +622,13 @@ Sources are applied in this order, so the command line wins over a file: every `
 # Minimal
 generate-rerun-config -f test-2.md
 
-# Named rerun, two tasks, context overrides, installed in one line
+# Named rerun, two tasks, context overrides
 generate-rerun-config -f test-2.md -f test-5.md --name "login flow" \
-  --data user_email=qa+rerun@example.com \
-  | upload-instruction-file rerun-config.json
+  --data user_email=qa+rerun@example.com
+
+# Install it, without clobbering a working config if generation fails
+cfg=$(generate-rerun-config -f test-2.md -f test-5.md --name "login flow") \
+  && printf '%s\n' "$cfg" | upload-instruction-file rerun-config.json
 
 # Which task filenames are available for a flow
 get-test-report --list-tests | jq -r '.[].file'

@@ -61,6 +61,7 @@ echo '== name normalization matches the agent, case for case =='
 # predicts on stderr must be the folder rerun-qa actually creates.
 while IFS='|' read -r raw expected; do
   [ -n "$raw" ] || continue
+  raw=$(printf '%b' "$raw")   # let \n in the table denote a real newline
   bash "$script" -ap "$agent" -f test-2.md --name "$raw" > /dev/null 2> "$tmpdir/norm.err" \
     || fail "expected --name \"$raw\" to be accepted"
   got=$(sed -n 's/.*outputs\/rerun-\(.*\)\/.*/\1/p' "$tmpdir/norm.err")
@@ -70,6 +71,7 @@ done <<'CASES'
 login flow|login_flow
 Login Flow|login_flow
   padded  name  |padded_name
+ab\ncd|ab_cd
 Nightly Run #3|nightly_run_3
 login__flow|login__flow
 a-b_c|a-b_c
@@ -113,6 +115,25 @@ echo '== output is exactly one JSON document =='
 bash "$script" -ap "$agent" -f test-2.md --name rerun-a --data k=v 2>/dev/null > "$tmpdir/doc.out"
 jq -e -s 'length == 1' "$tmpdir/doc.out" > /dev/null \
   || fail 'expected exactly one top-level document'
+
+echo '== a comma in a filename is not mistaken for a duplicate =='
+# Membership was comma-joined, so "b,a.md" made an unrelated "a.md" look like a
+# repeat of it.
+touch "$agent/tasks/b,a.md" "$agent/tasks/a.md"
+comma_err=$(bash "$script" -ap "$agent" -f "b,a.md" -f "a.md" 2>&1 >/dev/null)
+[ -z "$comma_err" ] || fail "expected no warning for distinct files, got: $comma_err"
+
+echo '== a data path colliding with a non-object exits 1, not 2 =='
+# Unchecked, the empty result reached --argjson and surfaced as a second,
+# wrong-layer jq error with exit 2 -- contradicting the documented exit 1.
+printf '{"user":"ada"}' > "$tmpdir/collide.json"
+rc=0
+bash "$script" -ap "$agent" -f test-2.md --data-file "$tmpdir/collide.json" \
+  --data user.name=Ada > "$tmpdir/collide.out" 2> "$tmpdir/collide.err" || rc=$?
+[ "$rc" -eq 1 ] || fail "expected exit 1 for a colliding data path, got $rc"
+[ ! -s "$tmpdir/collide.out" ] || fail 'expected empty stdout for a colliding data path'
+grep -Fq 'could not build "data"' "$tmpdir/collide.err" \
+  || fail 'expected an error naming the data build, not a bare jq message'
 
 echo '== a duplicate -f warns but still emits =='
 dup=$(bash "$script" -ap "$agent" -f test-2.md -f test-2.md 2> "$tmpdir/dup.err")

@@ -105,7 +105,11 @@ done
 # Source shared libs co-located with this script (repo scripts/ in dev,
 # /usr/local/bin in the container). The .sh suffix only exists in dev.
 # shellcheck source=context-ops-lib.sh
-for _name in context-ops-lib; do
+# shellcheck source=run-qa-lib.sh
+# run-qa-lib is sourced for run_qa_normalize_rerun_name only; it has no
+# source-time side effects beyond two path constants, and this command
+# deliberately never calls is_run_qa_active (see the design's Non-Goals).
+for _name in context-ops-lib run-qa-lib; do
   _path="${_LIB}/${_name}"
   [ -f "${_path}.sh" ] && _path="${_path}.sh"
   # shellcheck disable=SC1090
@@ -127,16 +131,6 @@ list_available_tasks() {
     fi
     [ -z "$out" ] && out="(none)"
     printf '%s' "$out"
-}
-
-# Mirrors normalizeRerunName in the agent's rerun-output-dir.ts character for
-# character: trim, lower-case, whitespace runs to "_", then strip everything
-# outside a-z0-9_-. The folder this predicts is the one the agent will create,
-# so any drift here would make the warnings below point at the wrong path.
-normalize_rerun_name() {
-    printf '%s' "$(context_ops_trim "$1")" \
-        | tr '[:upper:]' '[:lower:]' \
-        | sed -E 's/[[:space:]]+/_/g; s/[^a-z0-9_-]//g'
 }
 
 # ---- flow ------------------------------------------------------------------
@@ -167,24 +161,23 @@ done
 
 # Replaying one task twice is legal, so this warns rather than fails -- but a
 # repeat is more often a typo than an intention, and silence would hide it.
-# Plain string membership, not an associative array: the host runs bash 3.2.
+# Newline-delimited membership with a whole-line match, not an associative
+# array: the host runs bash 3.2. Not comma-delimited -- a comma is legal in a
+# filename, and joining on one made "b,a.md" report an unrelated "a.md" as a
+# duplicate.
 _seen=""
 _warned=""
 for _file in "${FILES[@]}"; do
-    case ",${_seen}," in
-        *",${_file},"*)
-            case ",${_warned}," in
-                *",${_file},"*) ;;
-                *)
-                    echo "⚠️  Duplicate task file in flow: ${_file} (it will be replayed more than once)" >&2
-                    _warned="${_warned},${_file}"
-                    ;;
-            esac
-            ;;
-        *)
-            _seen="${_seen},${_file}"
-            ;;
-    esac
+    if printf '%s\n' "$_seen" | grep -Fxq -- "$_file"; then
+        if ! printf '%s\n' "$_warned" | grep -Fxq -- "$_file"; then
+            echo "⚠️  Duplicate task file in flow: ${_file} (it will be replayed more than once)" >&2
+            _warned="${_warned}
+${_file}"
+        fi
+    else
+        _seen="${_seen}
+${_file}"
+    fi
 done
 
 # ---- name ------------------------------------------------------------------
@@ -199,8 +192,11 @@ if [ "$NAME_GIVEN" -eq 1 ]; then
         exit 1
     fi
 
-    NORMALIZED="$(normalize_rerun_name "$NAME")"
-    if [ -z "$NORMALIZED" ]; then
+    # run_qa_normalize_rerun_name is the repo's single mirror of the agent's
+    # normalizeRerunName, and returns 1 when nothing survives. Reused rather
+    # than reimplemented: a sed-based copy is line-oriented and would leave a
+    # newline uncollapsed, predicting a folder the agent never creates.
+    if ! NORMALIZED="$(run_qa_normalize_rerun_name "$NAME")"; then
         echo "ERROR: --name normalizes to an empty string: \"$NAME\"" >&2
         echo "       Names keep only a-z, 0-9, \"_\" and \"-\"; everything else is stripped." >&2
         exit 1
@@ -251,7 +247,14 @@ done
 # shellcheck disable=SC2034 # read by context_ops_build_path_json in the sourced lib
 CONTEXT_PATH_PREFIX=""
 for _pairs in "${DATA_PAIRS[@]+"${DATA_PAIRS[@]}"}"; do
-    DATA_JSON="$(context_ops_apply_pairs "$DATA_JSON" "$_pairs")"
+    # Checked: context_ops_apply_pairs returns 1 when a dotted key collides with
+    # a non-object value already in "data" (--data-file '{"user":"ada"}' plus
+    # --data user.name=Ada). Unchecked, the empty result reached --argjson and
+    # surfaced as a second, wrong-layer jq error with exit 2.
+    if ! DATA_JSON="$(context_ops_apply_pairs "$DATA_JSON" "$_pairs")" || [ -z "$DATA_JSON" ]; then
+        echo "ERROR: could not build \"data\" from: $_pairs" >&2
+        exit 1
+    fi
 done
 
 # ---- emit ------------------------------------------------------------------
