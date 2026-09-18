@@ -432,20 +432,28 @@ config_ai_mode() {
             echo "  Must be a JSON object of string values, e.g. {\"HTTP-Referer\":\"https://example.com\"}"
           done
 
-          # Default the prompt to whatever is configured today.
-          if [[ "$current_temp_enabled" == "false" ]]; then
-            printf "  Send temperature with each request? [y/N]: "
-          else
-            printf "  Send temperature with each request? [Y/n]: "
-          fi
-          read -r send_temp
-          send_temp="$(printf '%s' "$send_temp" | tr -d '[:space:]' | tr '[:upper:]' '[:lower:]')"
-          case "$send_temp" in
-            n|no)   temperature_enabled="false" ;;
-            y|yes)  temperature_enabled="true" ;;
-            "")     temperature_enabled="$current_temp_enabled" ;;
-            *)      temperature_enabled="$current_temp_enabled" ;;
-          esac
+          # Default to whatever is configured today; an unset config means the
+          # template default, which is true.
+          local temp_default="${current_temp_enabled:-true}"
+          while true; do
+            if [[ "$temp_default" == "false" ]]; then
+              printf "  Send temperature with each request? [y/N]: "
+            else
+              printf "  Send temperature with each request? [Y/n]: "
+            fi
+            read -r send_temp
+            send_temp="$(printf '%s' "$send_temp" | tr -d '[:space:]' | tr '[:upper:]' '[:lower:]')"
+            case "$send_temp" in
+              n|no)   temperature_enabled="false"; break ;;
+              y|yes)  temperature_enabled="true"; break ;;
+              "")     temperature_enabled="$temp_default"; break ;;
+              # A typo must not be read as agreement. Falling through to the
+              # default here would apply the opposite of what the user meant,
+              # and the summary would not mention it at all. Re-prompt, as the
+              # base-URL and header prompts above already do.
+              *)      echo "  Please answer y or n (blank keeps ${temp_default})." ;;
+            esac
+          done
           ;;
       esac
 

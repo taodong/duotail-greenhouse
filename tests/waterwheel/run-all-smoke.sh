@@ -52,5 +52,8 @@ bash "$tests_dir/generate-rerun-config-smoke.sh"
 echo '== run config-ai-provider smoke =='
 bash "$tests_dir/config-ai-provider-smoke.sh"
 
+echo '== run config-agent smoke =='
+bash "$tests_dir/config-agent-smoke.sh"
+
 echo 'all smoke checks passed'
 
