@@ -211,8 +211,15 @@ added, because compatible vendors mount their API at different paths (`/v1`, `/o
 `/api/v1`, or root). Supply the full base path including any version segment. If the endpoint runs
 on the host machine, use `http://host.docker.internal:<port>/...`.
 
-**2. Extra HTTP headers — optional.** Leave blank to skip. The value is written to
-`AI_EXTRA_HEADERS` and must be a JSON object whose values are all strings:
+The entry is trimmed and any trailing slash removed (`.../v1/` would otherwise request
+`.../v1//chat/completions`). It must start with `http://` or `https://` and contain no whitespace;
+anything else re-prompts rather than being silently rewritten.
+
+**2. Extra HTTP headers — optional.** The value is written to `AI_EXTRA_HEADERS` and must be a JSON
+object whose values are all strings. On a first run, leave blank for none. Once a value is
+configured the prompt changes to `blank keeps the current value, 'none' clears it` — `agent-config.json`
+is rebuilt from the template on every apply, so the prompt carries the existing value forward rather
+than letting a mode switch wipe a gateway's auth header:
 
 ```
   Enter extra HTTP headers as JSON, or leave blank for none: {"HTTP-Referer":"https://duotail.com"}
@@ -228,9 +235,10 @@ marked `sensitive` and routinely carries credentials, so only the expected shape
 These headers are merged over the default `Authorization` / `Content-Type` headers, so a same-named
 entry overrides the default.
 
-**3. Temperature — optional.** Answer `n` for reasoning models (OpenAI o-series, GPT-5 reasoning
-variants, and reasoning-tuned models behind a compatible gateway or self-host) that reject an
-explicit `temperature` field. Anything else keeps the default:
+**3. Temperature — optional.** Answer `n` or `no` (case-insensitive) for reasoning models (OpenAI
+o-series, GPT-5 reasoning variants, and reasoning-tuned models behind a compatible gateway or
+self-host) that reject an explicit `temperature` field. The `[Y/n]` / `[y/N]` default follows what is
+already configured, and a blank answer keeps it:
 
 ```
   Send temperature with each request? [Y/n]:

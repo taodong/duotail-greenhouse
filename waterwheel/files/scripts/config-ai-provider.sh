@@ -243,6 +243,29 @@ resolve_mode_file() {
   fi
 }
 
+# Reads an env-param's current default out of the live agent-config.json.
+# Empty when the file does not exist yet (first configuration).
+current_config_value() {
+  local key="$1"
+  [[ -f "$AGENT_CONFIG_FILE" ]] || { printf ''; return 0; }
+  jq -r --arg k "$key" '
+    (."env-params" // []) | map(select(.name == $k)) | .[0].default // ""
+  ' "$AGENT_CONFIG_FILE" 2>/dev/null || printf ''
+}
+
+# Trims surrounding whitespace (including tabs and CR from pasted input) and
+# strips trailing slashes. The agent appends '/chat/completions' verbatim, so a
+# trailing slash would produce a double slash that several gateways reject.
+normalize_base_url() {
+  local url="$1"
+  url="${url#"${url%%[![:space:]]*}"}"
+  url="${url%"${url##*[![:space:]]}"}"
+  while [[ "$url" == */ ]]; do
+    url="${url%/}"
+  done
+  printf '%s' "$url"
+}
+
 # Providers that consume each optional flag. A flag aimed at a provider that
 # ignores it is a warning, not an error: the value is inert in agent-config.json,
 # and erroring would make this command stricter than the agent it configures.
@@ -261,6 +284,15 @@ validate_optional_args() {
   fi
 
   if [[ -n "$BASE_URL" ]]; then
+    BASE_URL="$(normalize_base_url "$BASE_URL")"
+    if [[ ! "$BASE_URL" =~ ^https?:// ]]; then
+      echo "Error: --base-url must start with http:// or https://, received: '${BASE_URL}'." >&2
+      exit 1
+    fi
+    if [[ "$BASE_URL" =~ [[:space:]] ]]; then
+      echo "Error: --base-url must not contain whitespace, received: '${BASE_URL}'." >&2
+      exit 1
+    fi
     warn_if_ignored "--base-url" "gemma openai-compatible"
   fi
 
@@ -319,10 +351,52 @@ update_args=(
   --config "$AGENT_CONFIG_FILE"
 )
 
-[[ -n "$BASE_URL" ]] && update_args+=(--set "AI_BASE_URL=${BASE_URL}")
-[[ -n "$EXTRA_HEADERS" ]] && update_args+=(--set "AI_EXTRA_HEADERS=${EXTRA_HEADERS}")
-[[ -n "$TEMPERATURE" ]] && update_args+=(--set "AI_TEMPERATURE=${TEMPERATURE}")
-[[ -n "$TEMPERATURE_ENABLED" ]] && update_args+=(--set "AI_TEMPERATURE_ENABLED=${TEMPERATURE_ENABLED}")
+# update-agent-config always rebuilds from the template, so any value not
+# re-supplied here reverts to the template default. None of these four can come
+# from a mode file, so carry the current config's values forward unless this
+# invocation overrides them -- otherwise switching modes within a provider would
+# silently drop a gateway's auth headers or a reasoning model's temperature opt-out.
+# Written out per value rather than through a helper: a helper would have to run
+# in a command substitution to return the value, and a subshell cannot record
+# which values were carried.
+CARRIED=()
+
+EFFECTIVE_BASE_URL="$BASE_URL"
+if [[ -z "$EFFECTIVE_BASE_URL" ]]; then
+  EFFECTIVE_BASE_URL="$(current_config_value AI_BASE_URL)"
+  [[ -n "$EFFECTIVE_BASE_URL" ]] && CARRIED+=("AI_BASE_URL")
+fi
+
+EFFECTIVE_EXTRA_HEADERS="$EXTRA_HEADERS"
+if [[ -z "$EFFECTIVE_EXTRA_HEADERS" ]]; then
+  EFFECTIVE_EXTRA_HEADERS="$(current_config_value AI_EXTRA_HEADERS)"
+  [[ -n "$EFFECTIVE_EXTRA_HEADERS" ]] && CARRIED+=("AI_EXTRA_HEADERS")
+fi
+
+EFFECTIVE_TEMPERATURE="$TEMPERATURE"
+if [[ -z "$EFFECTIVE_TEMPERATURE" ]]; then
+  EFFECTIVE_TEMPERATURE="$(current_config_value AI_TEMPERATURE)"
+  [[ -n "$EFFECTIVE_TEMPERATURE" ]] && CARRIED+=("AI_TEMPERATURE")
+fi
+
+EFFECTIVE_TEMPERATURE_ENABLED="$TEMPERATURE_ENABLED"
+if [[ -z "$EFFECTIVE_TEMPERATURE_ENABLED" ]]; then
+  EFFECTIVE_TEMPERATURE_ENABLED="$(current_config_value AI_TEMPERATURE_ENABLED)"
+  [[ -n "$EFFECTIVE_TEMPERATURE_ENABLED" ]] && CARRIED+=("AI_TEMPERATURE_ENABLED")
+fi
+
+was_carried() {
+  local key="$1" k
+  for k in "${CARRIED[@]+"${CARRIED[@]}"}"; do
+    [[ "$k" == "$key" ]] && return 0
+  done
+  return 1
+}
+
+[[ -n "$EFFECTIVE_BASE_URL" ]] && update_args+=(--set "AI_BASE_URL=${EFFECTIVE_BASE_URL}")
+[[ -n "$EFFECTIVE_EXTRA_HEADERS" ]] && update_args+=(--set "AI_EXTRA_HEADERS=${EFFECTIVE_EXTRA_HEADERS}")
+[[ -n "$EFFECTIVE_TEMPERATURE" ]] && update_args+=(--set "AI_TEMPERATURE=${EFFECTIVE_TEMPERATURE}")
+[[ -n "$EFFECTIVE_TEMPERATURE_ENABLED" ]] && update_args+=(--set "AI_TEMPERATURE_ENABLED=${EFFECTIVE_TEMPERATURE_ENABLED}")
 
 if ! "$UPDATE_CONFIG_CMD" "${update_args[@]}"; then
   echo "Error: failed to update agent config." >&2
@@ -336,10 +410,10 @@ label="$(grep "^# label:" "$MODE_FILE" | sed 's/^# label: *//' || echo "$MODE_SL
 # Keys a --set override already accounts for. A mode file line for any of these
 # is superseded, so print the override once instead of both values.
 overridden_keys=("AI_PROVIDER")
-[[ -n "$BASE_URL" ]] && overridden_keys+=("AI_BASE_URL")
-[[ -n "$EXTRA_HEADERS" ]] && overridden_keys+=("AI_EXTRA_HEADERS")
-[[ -n "$TEMPERATURE" ]] && overridden_keys+=("AI_TEMPERATURE")
-[[ -n "$TEMPERATURE_ENABLED" ]] && overridden_keys+=("AI_TEMPERATURE_ENABLED")
+[[ -n "$EFFECTIVE_BASE_URL" ]] && overridden_keys+=("AI_BASE_URL")
+[[ -n "$EFFECTIVE_EXTRA_HEADERS" ]] && overridden_keys+=("AI_EXTRA_HEADERS")
+[[ -n "$EFFECTIVE_TEMPERATURE" ]] && overridden_keys+=("AI_TEMPERATURE")
+[[ -n "$EFFECTIVE_TEMPERATURE_ENABLED" ]] && overridden_keys+=("AI_TEMPERATURE_ENABLED")
 
 is_overridden() {
   local key="$1" k
@@ -359,11 +433,16 @@ while IFS= read -r line || [[ -n "$line" ]]; do
   is_overridden "${line%%=*}" && continue
   echo "  ${line}"
 done < "$MODE_FILE"
-[[ -n "$BASE_URL" ]] && echo "  AI_BASE_URL=${BASE_URL}"
-[[ -n "$TEMPERATURE" ]] && echo "  AI_TEMPERATURE=${TEMPERATURE}"
-[[ -n "$TEMPERATURE_ENABLED" ]] && echo "  AI_TEMPERATURE_ENABLED=${TEMPERATURE_ENABLED}"
+# A carried-forward value is called out so it is never a silent surprise.
+suffix_for() {
+  was_carried "$1" && printf '%s' "   (kept from current config)" || printf ''
+}
+
+[[ -n "$EFFECTIVE_BASE_URL" ]] && echo "  AI_BASE_URL=${EFFECTIVE_BASE_URL}$(suffix_for AI_BASE_URL)"
+[[ -n "$EFFECTIVE_TEMPERATURE" ]] && echo "  AI_TEMPERATURE=${EFFECTIVE_TEMPERATURE}$(suffix_for AI_TEMPERATURE)"
+[[ -n "$EFFECTIVE_TEMPERATURE_ENABLED" ]] && echo "  AI_TEMPERATURE_ENABLED=${EFFECTIVE_TEMPERATURE_ENABLED}$(suffix_for AI_TEMPERATURE_ENABLED)"
 # Value deliberately masked: AI_EXTRA_HEADERS is sensitive.
-[[ -n "$EXTRA_HEADERS" ]] && echo "  AI_EXTRA_HEADERS=<set>"
+[[ -n "$EFFECTIVE_EXTRA_HEADERS" ]] && echo "  AI_EXTRA_HEADERS=<set>$(suffix_for AI_EXTRA_HEADERS)"
 
 exit 0
 

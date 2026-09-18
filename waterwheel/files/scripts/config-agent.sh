@@ -212,6 +212,29 @@ disable_gemma_extra() {
 
 # ── ai mode config ────────────────────────────────────────────────────────────
 
+# Reads an env-param's current default out of the live agent-config.json.
+# Empty when the file does not exist yet (first configuration).
+current_config_value() {
+  local key="$1"
+  [[ -f "$AGENT_CONFIG_FILE" ]] || { printf ''; return 0; }
+  jq -r --arg k "$key" '
+    (."env-params" // []) | map(select(.name == $k)) | .[0].default // ""
+  ' "$AGENT_CONFIG_FILE" 2>/dev/null || printf ''
+}
+
+# Trims surrounding whitespace (including tabs and CR from pasted input) and
+# strips trailing slashes. The agent appends '/chat/completions' verbatim, so a
+# trailing slash would produce a double slash that several gateways reject.
+normalize_base_url() {
+  local url="$1"
+  url="${url#"${url%%[![:space:]]*}"}"
+  url="${url%"${url##*[![:space:]]}"}"
+  while [[ "$url" == */ ]]; do
+    url="${url%/}"
+  done
+  printf '%s' "$url"
+}
+
 config_ai_mode() {
   while true; do
     local is_initial=false
@@ -354,26 +377,50 @@ config_ai_mode() {
       local extra_headers=""
       local temperature_enabled=""
       local send_temp=""
+      # update-agent-config rebuilds from the template, so anything not re-supplied
+      # below reverts to the template default. Seed each prompt from the current
+      # config so re-applying a mode never silently drops a value.
+      local current_headers current_temp_enabled current_temperature
+      current_headers="$(current_config_value AI_EXTRA_HEADERS)"
+      current_temp_enabled="$(current_config_value AI_TEMPERATURE_ENABLED)"
+      current_temperature="$(current_config_value AI_TEMPERATURE)"
+
       case "$mode_provider" in
         gemma)
           printf "  Enter Ollama base URL (e.g. http://host.docker.internal:11434): "
           read -r base_url
+          base_url="$(normalize_base_url "$base_url")"
           ;;
         openai-compatible)
           # The agent throws at startup without this one, so keep asking.
-          while [[ -z "$base_url" ]]; do
+          while true; do
             printf "  Enter base URL including version path (e.g. https://openrouter.ai/api/v1): "
             read -r base_url
-            base_url="${base_url// /}"
+            base_url="$(normalize_base_url "$base_url")"
             if [[ -z "$base_url" ]]; then
               echo "  A base URL is required for this provider."
+            elif [[ ! "$base_url" =~ ^https?:// ]]; then
+              echo "  Must start with http:// or https://"
+            elif [[ "$base_url" =~ [[:space:]] ]]; then
+              echo "  Must not contain whitespace."
+            else
+              break
             fi
           done
 
           while true; do
-            printf "  Enter extra HTTP headers as JSON, or leave blank for none: "
+            if [[ -n "$current_headers" ]]; then
+              printf "  Extra HTTP headers as JSON -- blank keeps the current value, 'none' clears it: "
+            else
+              printf "  Enter extra HTTP headers as JSON, or leave blank for none: "
+            fi
             read -r extra_headers
             if [[ -z "${extra_headers// }" ]]; then
+              # Blank keeps whatever is configured today (empty on a first run).
+              extra_headers="$current_headers"
+              break
+            fi
+            if [[ "$extra_headers" == "none" ]]; then
               extra_headers=""
               break
             fi
@@ -385,11 +432,20 @@ config_ai_mode() {
             echo "  Must be a JSON object of string values, e.g. {\"HTTP-Referer\":\"https://example.com\"}"
           done
 
-          printf "  Send temperature with each request? [Y/n]: "
-          read -r send_temp
-          if [[ "$send_temp" =~ ^[Nn]$ ]]; then
-            temperature_enabled="false"
+          # Default the prompt to whatever is configured today.
+          if [[ "$current_temp_enabled" == "false" ]]; then
+            printf "  Send temperature with each request? [y/N]: "
+          else
+            printf "  Send temperature with each request? [Y/n]: "
           fi
+          read -r send_temp
+          send_temp="$(printf '%s' "$send_temp" | tr -d '[:space:]' | tr '[:upper:]' '[:lower:]')"
+          case "$send_temp" in
+            n|no)   temperature_enabled="false" ;;
+            y|yes)  temperature_enabled="true" ;;
+            "")     temperature_enabled="$current_temp_enabled" ;;
+            *)      temperature_enabled="$current_temp_enabled" ;;
+          esac
           ;;
       esac
 
@@ -414,6 +470,9 @@ config_ai_mode() {
         [[ -n "$base_url" ]] && update_args+=(--set "AI_BASE_URL=${base_url}")
         [[ -n "$extra_headers" ]] && update_args+=(--set "AI_EXTRA_HEADERS=${extra_headers}")
         [[ -n "$temperature_enabled" ]] && update_args+=(--set "AI_TEMPERATURE_ENABLED=${temperature_enabled}")
+        # Never prompted for, but the template would otherwise reset it.
+        [[ "$mode_provider" == "openai-compatible" && -n "$current_temperature" ]] \
+          && update_args+=(--set "AI_TEMPERATURE=${current_temperature}")
 
         if ! "$UPDATE_CONFIG_CMD" "${update_args[@]}"; then
           echo "  Failed to update agent config."

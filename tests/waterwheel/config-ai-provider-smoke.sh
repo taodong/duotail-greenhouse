@@ -161,4 +161,60 @@ bash "$cap" --provider openai-compatible --model some/model --mode efficiency \
 [ "$(param "$root" CONTEXT_COMPRESSION)" = "true" ] \
   || { echo 'expected efficiency mode to enable CONTEXT_COMPRESSION' >&2; exit 1; }
 
+echo '== a call with no new flags produces the pre-change config =='
+# Baseline: the four optional flags must be purely additive.
+root="$(new_env baseline)"
+bash "$cap" --provider openai --model gpt-5.4 --mode efficiency \
+  -ap "$root/agent" -cp "$root/helpers" >/dev/null
+[ "$(param "$root" AI_PROVIDER)" = "openai" ] || { echo 'bad AI_PROVIDER' >&2; exit 1; }
+[ "$(param "$root" AI_MODEL)" = "gpt-5.4" ] || { echo 'bad AI_MODEL' >&2; exit 1; }
+[ "$(param "$root" AI_BASE_URL)" = "" ] || { echo 'expected AI_BASE_URL untouched' >&2; exit 1; }
+[ "$(param "$root" AI_TEMPERATURE)" = "0.0" ] || { echo 'expected template AI_TEMPERATURE' >&2; exit 1; }
+[ "$(param "$root" AI_TEMPERATURE_ENABLED)" = "true" ] || { echo 'expected template default' >&2; exit 1; }
+[ "$(param "$root" AI_EXTRA_HEADERS)" = "" ] || { echo 'expected template default' >&2; exit 1; }
+
+echo '== switching modes keeps values that only a flag can set =='
+# update-agent-config rebuilds from the template, so anything not re-supplied
+# would otherwise revert -- silently dropping a gateway's auth headers.
+root="$(new_env carry)"
+bash "$cap" --provider openai-compatible --model m --mode default \
+  --base-url https://openrouter.ai/api/v1 \
+  --extra-headers '{"HTTP-Referer":"https://d.com"}' \
+  --temperature 0.3 --temperature-enabled false \
+  -ap "$root/agent" -cp "$root/helpers" >/dev/null
+out="$(bash "$cap" --provider openai-compatible --model m --mode efficiency \
+  --base-url https://openrouter.ai/api/v1 -ap "$root/agent" -cp "$root/helpers")"
+[ "$(param "$root" AI_EXTRA_HEADERS)" = '{"HTTP-Referer":"https://d.com"}' ] \
+  || { echo 'AI_EXTRA_HEADERS was wiped by a mode switch' >&2; exit 1; }
+[ "$(param "$root" AI_TEMPERATURE_ENABLED)" = "false" ] \
+  || { echo 'AI_TEMPERATURE_ENABLED was wiped by a mode switch' >&2; exit 1; }
+[ "$(param "$root" AI_TEMPERATURE)" = "0.3" ] \
+  || { echo 'AI_TEMPERATURE was wiped by a mode switch' >&2; exit 1; }
+# A carried value must be visible, never a silent surprise.
+printf '%s' "$out" | grep -q 'kept from current config' \
+  || { echo 'expected carried-forward values to be called out' >&2; exit 1; }
+
+echo '== an explicit flag still overrides a carried-forward value =='
+bash "$cap" --provider openai-compatible --model m --mode efficiency \
+  --base-url https://openrouter.ai/api/v1 --temperature-enabled true \
+  -ap "$root/agent" -cp "$root/helpers" >/dev/null
+[ "$(param "$root" AI_TEMPERATURE_ENABLED)" = "true" ] \
+  || { echo 'explicit flag did not override the carried value' >&2; exit 1; }
+
+echo '== --base-url is trimmed, de-slashed, and shape-checked =='
+root="$(new_env url)"
+bash "$cap" --provider openai-compatible --model m --mode default \
+  --base-url '  https://openrouter.ai/api/v1/  ' -ap "$root/agent" -cp "$root/helpers" >/dev/null
+# A trailing slash would make the agent request '//chat/completions'.
+[ "$(param "$root" AI_BASE_URL)" = "https://openrouter.ai/api/v1" ] \
+  || { echo "expected a trimmed, de-slashed base URL, got '$(param "$root" AI_BASE_URL)'" >&2; exit 1; }
+for bad in 'openrouter.ai/api/v1' 'https://api.x.com/ v1'; do
+  root="$(new_env "url-$RANDOM")"
+  if bash "$cap" --provider openai-compatible --model m --mode default \
+    --base-url "$bad" -ap "$root/agent" -cp "$root/helpers" >/dev/null 2>&1; then
+    echo "expected malformed --base-url to be rejected: $bad" >&2
+    exit 1
+  fi
+done
+
 echo 'config-ai-provider smoke: OK'

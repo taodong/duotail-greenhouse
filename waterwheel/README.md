@@ -889,7 +889,17 @@ config-ai-provider --provider <provider> --model <model> --mode <default|efficie
   even in the validation error, because `AI_EXTRA_HEADERS` is marked `sensitive` and routinely
   carries credentials. The applied-settings summary prints `AI_EXTRA_HEADERS=<set>`.
 - A flag aimed at a provider that ignores it warns on stderr and still applies; the value is inert
-  in `agent-config.json`.
+  in `agent-config.json`. Only `openai-compatible` sends `AI_TEMPERATURE` — every other provider
+  reads it purely to fail fast on a malformed value, then discards it — so `--temperature` warns
+  for them too.
+- `--base-url` is trimmed, has trailing slashes stripped (the agent appends `/chat/completions`
+  verbatim, so `.../v1/` would request `.../v1//chat/completions`), and must start with `http://`
+  or `https://` and contain no whitespace.
+- **Values are carried forward.** `agent-config.json` is rebuilt from the template on every call, so
+  any of `AI_BASE_URL`, `AI_EXTRA_HEADERS`, `AI_TEMPERATURE` or `AI_TEMPERATURE_ENABLED` that is not
+  passed is re-read from the current config and preserved — switching modes within a provider never
+  silently drops a gateway's auth headers. Carried values are marked
+  `(kept from current config)` in the summary. Pass the flag explicitly to change one.
 
 ### Examples
 
