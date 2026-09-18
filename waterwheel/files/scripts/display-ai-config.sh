@@ -15,7 +15,11 @@ Options:
   h, help      Show this help message
 
 Output:
-  JSON object with keys: aiProvider, aiModel, tokenMode
+  JSON object with keys: aiProvider, aiModel, tokenMode, aiBaseUrl
+
+  aiBaseUrl is empty for providers that do not use one. It matters most for
+  'openai-compatible', where two otherwise identical configs can point at
+  entirely different vendors.
 
 Lookup order for values:
   1) Environment variable
@@ -77,6 +81,7 @@ resolve_value() {
 ai_provider="$(resolve_value "AI_PROVIDER")"
 ai_model="$(resolve_value "AI_MODEL")"
 context_compression="$(resolve_value "CONTEXT_COMPRESSION")"
+ai_base_url="$(resolve_value "AI_BASE_URL")"
 
 token_mode=""
 if [[ -n "$context_compression" ]]; then
@@ -92,5 +97,6 @@ jq -n \
   --arg aiProvider "$ai_provider" \
   --arg aiModel "$ai_model" \
   --arg tokenMode "$token_mode" \
-  '{aiProvider: $aiProvider, aiModel: $aiModel, tokenMode: $tokenMode}'
+  --arg aiBaseUrl "$ai_base_url" \
+  '{aiProvider: $aiProvider, aiModel: $aiModel, tokenMode: $tokenMode, aiBaseUrl: $aiBaseUrl}'
 

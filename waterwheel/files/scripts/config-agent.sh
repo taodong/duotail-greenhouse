@@ -212,6 +212,29 @@ disable_gemma_extra() {
 
 # ── ai mode config ────────────────────────────────────────────────────────────
 
+# Reads an env-param's current default out of the live agent-config.json.
+# Empty when the file does not exist yet (first configuration).
+current_config_value() {
+  local key="$1"
+  [[ -f "$AGENT_CONFIG_FILE" ]] || { printf ''; return 0; }
+  jq -r --arg k "$key" '
+    (."env-params" // []) | map(select(.name == $k)) | .[0].default // ""
+  ' "$AGENT_CONFIG_FILE" 2>/dev/null || printf ''
+}
+
+# Trims surrounding whitespace (including tabs and CR from pasted input) and
+# strips trailing slashes. The agent appends '/chat/completions' verbatim, so a
+# trailing slash would produce a double slash that several gateways reject.
+normalize_base_url() {
+  local url="$1"
+  url="${url#"${url%%[![:space:]]*}"}"
+  url="${url%"${url##*[![:space:]]}"}"
+  while [[ "$url" == */ ]]; do
+    url="${url%/}"
+  done
+  printf '%s' "$url"
+}
+
 config_ai_mode() {
   while true; do
     local is_initial=false
@@ -347,13 +370,92 @@ config_ai_mode() {
         continue
       fi
 
-      local is_gemma=false
+      local mode_provider
+      mode_provider="$(grep "^AI_PROVIDER=" "$selected_file" | sed 's/^AI_PROVIDER=//' || echo "")"
+
       local base_url=""
-      if grep -q "^AI_PROVIDER=gemma" "$selected_file"; then
-        is_gemma=true
-        printf "  Enter Ollama base URL (e.g. http://host.docker.internal:11434): "
-        read -r base_url
-      fi
+      local extra_headers=""
+      local temperature_enabled=""
+      local send_temp=""
+      # update-agent-config rebuilds from the template, so anything not re-supplied
+      # below reverts to the template default. Seed each prompt from the current
+      # config so re-applying a mode never silently drops a value.
+      local current_headers current_temp_enabled current_temperature
+      current_headers="$(current_config_value AI_EXTRA_HEADERS)"
+      current_temp_enabled="$(current_config_value AI_TEMPERATURE_ENABLED)"
+      current_temperature="$(current_config_value AI_TEMPERATURE)"
+
+      case "$mode_provider" in
+        gemma)
+          printf "  Enter Ollama base URL (e.g. http://host.docker.internal:11434): "
+          read -r base_url
+          base_url="$(normalize_base_url "$base_url")"
+          ;;
+        openai-compatible)
+          # The agent throws at startup without this one, so keep asking.
+          while true; do
+            printf "  Enter base URL including version path (e.g. https://openrouter.ai/api/v1): "
+            read -r base_url
+            base_url="$(normalize_base_url "$base_url")"
+            if [[ -z "$base_url" ]]; then
+              echo "  A base URL is required for this provider."
+            elif [[ ! "$base_url" =~ ^https?:// ]]; then
+              echo "  Must start with http:// or https://"
+            elif [[ "$base_url" =~ [[:space:]] ]]; then
+              echo "  Must not contain whitespace."
+            else
+              break
+            fi
+          done
+
+          while true; do
+            if [[ -n "$current_headers" ]]; then
+              printf "  Extra HTTP headers as JSON -- blank keeps the current value, 'none' clears it: "
+            else
+              printf "  Enter extra HTTP headers as JSON, or leave blank for none: "
+            fi
+            read -r extra_headers
+            if [[ -z "${extra_headers// }" ]]; then
+              # Blank keeps whatever is configured today (empty on a first run).
+              extra_headers="$current_headers"
+              break
+            fi
+            if [[ "$extra_headers" == "none" ]]; then
+              extra_headers=""
+              break
+            fi
+            if printf '%s' "$extra_headers" \
+              | jq -e 'type == "object" and ([.[] | type] | all(. == "string"))' >/dev/null 2>&1; then
+              break
+            fi
+            # Value deliberately not echoed back: AI_EXTRA_HEADERS is sensitive.
+            echo "  Must be a JSON object of string values, e.g. {\"HTTP-Referer\":\"https://example.com\"}"
+          done
+
+          # Default to whatever is configured today; an unset config means the
+          # template default, which is true.
+          local temp_default="${current_temp_enabled:-true}"
+          while true; do
+            if [[ "$temp_default" == "false" ]]; then
+              printf "  Send temperature with each request? [y/N]: "
+            else
+              printf "  Send temperature with each request? [Y/n]: "
+            fi
+            read -r send_temp
+            send_temp="$(printf '%s' "$send_temp" | tr -d '[:space:]' | tr '[:upper:]' '[:lower:]')"
+            case "$send_temp" in
+              n|no)   temperature_enabled="false"; break ;;
+              y|yes)  temperature_enabled="true"; break ;;
+              "")     temperature_enabled="$temp_default"; break ;;
+              # A typo must not be read as agreement. Falling through to the
+              # default here would apply the opposite of what the user meant,
+              # and the summary would not mention it at all. Re-prompt, as the
+              # base-URL and header prompts above already do.
+              *)      echo "  Please answer y or n (blank keeps ${temp_default})." ;;
+            esac
+          done
+          ;;
+      esac
 
       if [[ "$is_initial" == true ]]; then
         echo ""
@@ -361,7 +463,7 @@ config_ai_mode() {
         echo ""
       fi
 
-      if [[ "$is_gemma" == true && -n "$base_url" ]]; then
+      if [[ -n "$base_url" ]]; then
         printf "  Apply '%s' with model '%s' and base URL '%s'? [y/N]: " "$label" "$model" "$base_url"
       else
         printf "  Apply '%s' with model '%s'? [y/N]: " "$label" "$model"
@@ -373,7 +475,12 @@ config_ai_mode() {
         fi
 
         local update_args=(--template "$DEFAULT_AGENT_CONFIG_FILE" --mode-file "$selected_file" --model "$model" --config "$AGENT_CONFIG_FILE")
-        [[ "$is_gemma" == true && -n "$base_url" ]] && update_args+=(--set "AI_BASE_URL=${base_url}")
+        [[ -n "$base_url" ]] && update_args+=(--set "AI_BASE_URL=${base_url}")
+        [[ -n "$extra_headers" ]] && update_args+=(--set "AI_EXTRA_HEADERS=${extra_headers}")
+        [[ -n "$temperature_enabled" ]] && update_args+=(--set "AI_TEMPERATURE_ENABLED=${temperature_enabled}")
+        # Never prompted for, but the template would otherwise reset it.
+        [[ "$mode_provider" == "openai-compatible" && -n "$current_temperature" ]] \
+          && update_args+=(--set "AI_TEMPERATURE=${current_temperature}")
 
         if ! "$UPDATE_CONFIG_CMD" "${update_args[@]}"; then
           echo "  Failed to update agent config."
@@ -384,7 +491,7 @@ config_ai_mode() {
         slug="$(basename "$selected_file" .env)"
         status_set_provider_mode "$slug"
 
-        if [[ "$is_gemma" == true ]]; then
+        if [[ "$mode_provider" == "gemma" ]]; then
           enable_gemma_extra
         fi
 
@@ -392,13 +499,16 @@ config_ai_mode() {
         echo "  Mode set to: ${label} (model: ${model})"
         echo ""
         echo "  Applied settings:"
-        while IFS= read -r line; do
+        while IFS= read -r line || [[ -n "$line" ]]; do
           [[ "$line" =~ ^# ]] && continue
           [[ -z "${line// }" ]] && continue
           echo "    ${line}"
         done < "$selected_file"
         echo "    AI_MODEL=${model}"
-        [[ "$is_gemma" == true && -n "$base_url" ]] && echo "    AI_BASE_URL=${base_url}"
+        [[ -n "$base_url" ]] && echo "    AI_BASE_URL=${base_url}"
+        [[ -n "$temperature_enabled" ]] && echo "    AI_TEMPERATURE_ENABLED=${temperature_enabled}"
+        # Value deliberately masked: AI_EXTRA_HEADERS is sensitive.
+        [[ -n "$extra_headers" ]] && echo "    AI_EXTRA_HEADERS=<set>"
 
         [[ "$is_initial" == true ]] && return 0
       fi
