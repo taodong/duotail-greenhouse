@@ -57,7 +57,7 @@ fi
 tmp="$(mktemp)"
 cp "${TEMPLATE_FILE:-$CONFIG_FILE}" "$tmp"
 
-while IFS= read -r line; do
+while IFS= read -r line || [[ -n "$line" ]]; do
   [[ "$line" =~ ^# ]] && continue
   [[ -z "${line// }" ]] && continue
   if [[ "$line" =~ ^([^=]+)=(.*)$ ]]; then
