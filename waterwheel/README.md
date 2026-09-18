@@ -855,7 +855,9 @@ The imported file may contain extra top-level metadata; only the `flow` array is
 `config-ai-provider` applies an AI provider mode and model without interactive prompts.
 
 ```bash
-config-ai-provider --provider <provider> --model <model> --mode <default|efficiency> [-ap <agent-path>] [-cp <config-helpers-path>]
+config-ai-provider --provider <provider> --model <model> --mode <default|efficiency> \
+  [--base-url <url>] [--extra-headers <json>] [--temperature <value>] [--temperature-enabled <true|false>] \
+  [-ap <agent-path>] [-cp <config-helpers-path>]
 ```
 
 ### Options
@@ -864,6 +866,10 @@ config-ai-provider --provider <provider> --model <model> --mode <default|efficie
 | `--provider <value>` | Provider value written directly to `AI_PROVIDER` (for example: `openai`) |
 | `--model <value>` | Model value written directly to `AI_MODEL` |
 | `--mode <value>` | Mode selector: `default` -> `<provider>-default.env`, `efficiency` -> `<provider>-token-efficiency.env` |
+| `-b`, `--base-url <url>` | Written to `AI_BASE_URL`. **Required** for `--provider openai-compatible`; honored by `gemma`; ignored (with a warning) by every other provider |
+| `--extra-headers <json>` | JSON object of string values, written to `AI_EXTRA_HEADERS`. Used only by `openai-compatible` |
+| `--temperature <value>` | Written to `AI_TEMPERATURE`. Sent only by `openai-compatible` |
+| `--temperature-enabled <true\|false>` | Written to `AI_TEMPERATURE_ENABLED`. Set `false` for reasoning models that reject a temperature field. Used only by `openai-compatible` |
 | `-ap <path>` | Override the agent path (default: `/agent`) |
 | `-cp <path>` | Override the config helpers path (default: `/config-helpers`) |
 | `-h`, `--help`, `h`, `help` | Show usage help |
@@ -872,8 +878,18 @@ config-ai-provider --provider <provider> --model <model> --mode <default|efficie
 
 - Uses the same mode-file update flow as `config-agent` option `1`.
 - Respects provider locking: once a provider is configured, switching to a different provider requires a new container.
-- Does **not** prompt for Gemma `AI_BASE_URL`.
 - Does **not** append Gemma extra instructions.
+- All four optional flags are validated **before** anything is written; a rejected call leaves `agent-config.json` untouched.
+- `--provider openai-compatible` without `--base-url` is an error. The agent itself throws at startup
+  without one, so this fails at config time instead of at run time.
+- `--base-url` is used **verbatim** for `openai-compatible` — only `/chat/completions` is appended,
+  so supply the vendor's full base path including any version segment. For `gemma` it is the bare
+  Ollama host and `/v1` is appended.
+- `--extra-headers` must parse as a JSON object of string values. **Its value is never echoed**, not
+  even in the validation error, because `AI_EXTRA_HEADERS` is marked `sensitive` and routinely
+  carries credentials. The applied-settings summary prints `AI_EXTRA_HEADERS=<set>`.
+- A flag aimed at a provider that ignores it warns on stderr and still applies; the value is inert
+  in `agent-config.json`.
 
 ### Examples
 
@@ -888,6 +904,36 @@ config-ai-provider \
   --mode efficiency \
   -ap /tmp/my-agent \
   -cp /tmp/config-helpers
+
+# OpenRouter through the openai-compatible adapter, with routing headers
+config-ai-provider \
+  --provider openai-compatible \
+  --model qwen/qwen3-235b-a22b \
+  --mode efficiency \
+  --base-url https://openrouter.ai/api/v1 \
+  --extra-headers '{"HTTP-Referer":"https://duotail.com","X-Title":"waterwheel"}'
+
+# Groq -- note the non-/v1 base path
+config-ai-provider \
+  --provider openai-compatible \
+  --model llama-3.3-70b-versatile \
+  --mode default \
+  --base-url https://api.groq.com/openai/v1
+
+# A self-hosted reasoning model that rejects an explicit temperature
+config-ai-provider \
+  --provider openai-compatible \
+  --model deepseek-ai/DeepSeek-R1-Distill-Qwen-32B \
+  --mode default \
+  --base-url http://host.docker.internal:8000/v1 \
+  --temperature-enabled false
+
+# Gemma against an Ollama server on the host
+config-ai-provider \
+  --provider gemma \
+  --model gemma4:e4b \
+  --mode default \
+  --base-url http://host.docker.internal:11434
 ```
 
 ---
@@ -913,6 +959,7 @@ Returns a JSON object with exactly these keys:
 - `aiProvider`
 - `aiModel`
 - `tokenMode`
+- `aiBaseUrl`
 
 Lookup order per key:
 
@@ -924,6 +971,11 @@ Key mapping:
 - `aiProvider` -> `AI_PROVIDER`
 - `aiModel` -> `AI_MODEL`
 - `tokenMode` -> `CONTEXT_COMPRESSION`
+- `aiBaseUrl` -> `AI_BASE_URL`
+
+`aiBaseUrl` is an empty string for providers that do not use one. It matters most for
+`openai-compatible`, where two configs can agree on provider, model and token mode while pointing at
+entirely different vendors.
 
 `tokenMode` mapping behavior:
 

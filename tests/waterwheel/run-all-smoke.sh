@@ -49,5 +49,8 @@ bash "$tests_dir/get-test-report-smoke.sh"
 echo '== run generate-rerun-config smoke =='
 bash "$tests_dir/generate-rerun-config-smoke.sh"
 
+echo '== run config-ai-provider smoke =='
+bash "$tests_dir/config-ai-provider-smoke.sh"
+
 echo 'all smoke checks passed'
 

@@ -347,13 +347,51 @@ config_ai_mode() {
         continue
       fi
 
-      local is_gemma=false
+      local mode_provider
+      mode_provider="$(grep "^AI_PROVIDER=" "$selected_file" | sed 's/^AI_PROVIDER=//' || echo "")"
+
       local base_url=""
-      if grep -q "^AI_PROVIDER=gemma" "$selected_file"; then
-        is_gemma=true
-        printf "  Enter Ollama base URL (e.g. http://host.docker.internal:11434): "
-        read -r base_url
-      fi
+      local extra_headers=""
+      local temperature_enabled=""
+      local send_temp=""
+      case "$mode_provider" in
+        gemma)
+          printf "  Enter Ollama base URL (e.g. http://host.docker.internal:11434): "
+          read -r base_url
+          ;;
+        openai-compatible)
+          # The agent throws at startup without this one, so keep asking.
+          while [[ -z "$base_url" ]]; do
+            printf "  Enter base URL including version path (e.g. https://openrouter.ai/api/v1): "
+            read -r base_url
+            base_url="${base_url// /}"
+            if [[ -z "$base_url" ]]; then
+              echo "  A base URL is required for this provider."
+            fi
+          done
+
+          while true; do
+            printf "  Enter extra HTTP headers as JSON, or leave blank for none: "
+            read -r extra_headers
+            if [[ -z "${extra_headers// }" ]]; then
+              extra_headers=""
+              break
+            fi
+            if printf '%s' "$extra_headers" \
+              | jq -e 'type == "object" and ([.[] | type] | all(. == "string"))' >/dev/null 2>&1; then
+              break
+            fi
+            # Value deliberately not echoed back: AI_EXTRA_HEADERS is sensitive.
+            echo "  Must be a JSON object of string values, e.g. {\"HTTP-Referer\":\"https://example.com\"}"
+          done
+
+          printf "  Send temperature with each request? [Y/n]: "
+          read -r send_temp
+          if [[ "$send_temp" =~ ^[Nn]$ ]]; then
+            temperature_enabled="false"
+          fi
+          ;;
+      esac
 
       if [[ "$is_initial" == true ]]; then
         echo ""
@@ -361,7 +399,7 @@ config_ai_mode() {
         echo ""
       fi
 
-      if [[ "$is_gemma" == true && -n "$base_url" ]]; then
+      if [[ -n "$base_url" ]]; then
         printf "  Apply '%s' with model '%s' and base URL '%s'? [y/N]: " "$label" "$model" "$base_url"
       else
         printf "  Apply '%s' with model '%s'? [y/N]: " "$label" "$model"
@@ -373,7 +411,9 @@ config_ai_mode() {
         fi
 
         local update_args=(--template "$DEFAULT_AGENT_CONFIG_FILE" --mode-file "$selected_file" --model "$model" --config "$AGENT_CONFIG_FILE")
-        [[ "$is_gemma" == true && -n "$base_url" ]] && update_args+=(--set "AI_BASE_URL=${base_url}")
+        [[ -n "$base_url" ]] && update_args+=(--set "AI_BASE_URL=${base_url}")
+        [[ -n "$extra_headers" ]] && update_args+=(--set "AI_EXTRA_HEADERS=${extra_headers}")
+        [[ -n "$temperature_enabled" ]] && update_args+=(--set "AI_TEMPERATURE_ENABLED=${temperature_enabled}")
 
         if ! "$UPDATE_CONFIG_CMD" "${update_args[@]}"; then
           echo "  Failed to update agent config."
@@ -384,7 +424,7 @@ config_ai_mode() {
         slug="$(basename "$selected_file" .env)"
         status_set_provider_mode "$slug"
 
-        if [[ "$is_gemma" == true ]]; then
+        if [[ "$mode_provider" == "gemma" ]]; then
           enable_gemma_extra
         fi
 
@@ -392,13 +432,16 @@ config_ai_mode() {
         echo "  Mode set to: ${label} (model: ${model})"
         echo ""
         echo "  Applied settings:"
-        while IFS= read -r line; do
+        while IFS= read -r line || [[ -n "$line" ]]; do
           [[ "$line" =~ ^# ]] && continue
           [[ -z "${line// }" ]] && continue
           echo "    ${line}"
         done < "$selected_file"
         echo "    AI_MODEL=${model}"
-        [[ "$is_gemma" == true && -n "$base_url" ]] && echo "    AI_BASE_URL=${base_url}"
+        [[ -n "$base_url" ]] && echo "    AI_BASE_URL=${base_url}"
+        [[ -n "$temperature_enabled" ]] && echo "    AI_TEMPERATURE_ENABLED=${temperature_enabled}"
+        # Value deliberately masked: AI_EXTRA_HEADERS is sensitive.
+        [[ -n "$extra_headers" ]] && echo "    AI_EXTRA_HEADERS=<set>"
 
         [[ "$is_initial" == true ]] && return 0
       fi

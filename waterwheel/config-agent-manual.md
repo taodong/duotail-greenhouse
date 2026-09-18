@@ -14,6 +14,7 @@
    - [Selecting a Mode (returning runs)](#selecting-a-mode-returning-runs)
    - [Entering the AI Model](#entering-the-ai-model)
    - [Gemma: Ollama Base URL](#gemma-ollama-base-url)
+   - [OpenAI-Compatible: Base URL, Extra Headers, Temperature](#openai-compatible-base-url-extra-headers-temperature)
    - [Manual Customized](#manual-customized)
    - [Provider Locking](#provider-locking)
    - [Switching Modes Within the Same Provider](#switching-modes-within-the-same-provider)
@@ -120,9 +121,11 @@ When no provider mode is configured, the script enters initial mode automaticall
   5) Gemini Default Mode
   6) Gemini Token Efficiency Mode
   7) Gemma 4 Default Mode
-  8) Open AI Default Mode
-  9) Open AI Token Efficiency Mode
-  10) Manual customized
+  8) OpenAI-Compatible Default Mode
+  9) OpenAI-Compatible Token Efficiency Mode
+  10) Open AI Default Mode
+  11) Open AI Token Efficiency Mode
+  12) Manual customized
 
 ----------------------------------------
   Choice:
@@ -192,6 +195,52 @@ If Ollama runs on the host machine, use `http://host.docker.internal:<port>`.
 
 After confirmation, the content of `extra-gemma.md` is appended to `/agent/instructions/extra-instructions.md` inside a `<!-- gemma-start -->` / `<!-- gemma-end -->` marker block, and `gemma` is recorded in `agent-config-status.yaml` under `extra-instructions`.
 
+### OpenAI-Compatible: Base URL, Extra Headers, Temperature
+
+When an OpenAI-Compatible mode is selected (provider `openai-compatible`), three extra prompts
+follow the model prompt, in this order.
+
+**1. Base URL — required.** The agent cannot start without it, so a blank entry re-prompts:
+
+```
+  Enter base URL including version path (e.g. https://openrouter.ai/api/v1):
+```
+
+The value is used **verbatim** — only `/chat/completions` is appended. Unlike Gemma, no `/v1` is
+added, because compatible vendors mount their API at different paths (`/v1`, `/openai/v1`,
+`/api/v1`, or root). Supply the full base path including any version segment. If the endpoint runs
+on the host machine, use `http://host.docker.internal:<port>/...`.
+
+**2. Extra HTTP headers — optional.** Leave blank to skip. The value is written to
+`AI_EXTRA_HEADERS` and must be a JSON object whose values are all strings:
+
+```
+  Enter extra HTTP headers as JSON, or leave blank for none: {"HTTP-Referer":"https://duotail.com"}
+```
+
+Malformed input re-prompts. **The rejected value is never echoed back** — `AI_EXTRA_HEADERS` is
+marked `sensitive` and routinely carries credentials, so only the expected shape is shown:
+
+```
+  Must be a JSON object of string values, e.g. {"HTTP-Referer":"https://example.com"}
+```
+
+These headers are merged over the default `Authorization` / `Content-Type` headers, so a same-named
+entry overrides the default.
+
+**3. Temperature — optional.** Answer `n` for reasoning models (OpenAI o-series, GPT-5 reasoning
+variants, and reasoning-tuned models behind a compatible gateway or self-host) that reject an
+explicit `temperature` field. Anything else keeps the default:
+
+```
+  Send temperature with each request? [Y/n]:
+```
+
+Answering `n` writes `AI_TEMPERATURE_ENABLED=false`, which makes the adapter omit the field
+entirely, regardless of `AI_TEMPERATURE`'s value.
+
+No extra-instruction block is appended for this provider.
+
 ### Manual Customized
 
 **Manual customized** is only available during [initial mode selection](#initial-mode-selection). It tells the script that you have configured the required environment variables (`AI_PROVIDER`, `AI_MODEL`, `AI_API_KEY`) yourself. The script records `provider-mode: manual` in `agent-config-status.yaml` and suppresses the exit warning. No changes are made to `agent-config.json`.
@@ -233,7 +282,20 @@ After a successful apply, the script prints every `KEY=VALUE` pair written to `a
     AI_MODEL=claude-sonnet-4-6
 ```
 
-For Gemma, `AI_BASE_URL` is included at the end if a value was entered.
+Any value collected by a provider-specific prompt is appended after `AI_MODEL`: `AI_BASE_URL` for
+Gemma and OpenAI-Compatible, plus `AI_TEMPERATURE_ENABLED` and `AI_EXTRA_HEADERS` for
+OpenAI-Compatible. The header value itself is masked:
+
+```
+  Mode set to: OpenAI-Compatible Default Mode (model: qwen/qwen3-235b-a22b)
+
+  Applied settings:
+    AI_PROVIDER=openai-compatible
+    AI_MODEL=qwen/qwen3-235b-a22b
+    AI_BASE_URL=https://openrouter.ai/api/v1
+    AI_TEMPERATURE_ENABLED=false
+    AI_EXTRA_HEADERS=<set>
+```
 
 ---
 
@@ -381,7 +443,7 @@ cp ./waterwheel/files/bootstrap/default-agent-config.json \
 
    The `provider` value is used to group modes — only modes sharing the same `provider` string are shown together once the provider is locked. Use a consistent string across all modes for the same provider (e.g. `Anthropic`, `DeepSeek`).
 
-3. Add `KEY=VALUE` lines for every `env-params` entry in `agent-config.json` you want to override. Unknown keys are silently ignored.
+3. Add `KEY=VALUE` lines for every `env-params` entry in `agent-config.json` you want to override. Unknown keys are silently ignored. **End the file with a newline** — mode files are read line by line, and while the readers now tolerate a missing final newline, keeping it makes the file a conventional text file.
 4. Rebuild the Docker image — the `COPY` instruction in the Dockerfile copies the entire `modes/` directory into `/config-helpers/modes/` at build time.
 
 **Special provider handling** is triggered by the `AI_PROVIDER` value in the mode file:
@@ -389,3 +451,4 @@ cp ./waterwheel/files/bootstrap/default-agent-config.json \
 | `AI_PROVIDER` value | Extra behaviour |
 |---|---|
 | `gemma` | Prompts for `AI_BASE_URL`; appends `extra-gemma.md` block to `extra-instructions.md`. |
+| `openai-compatible` | Prompts for `AI_BASE_URL` (required, re-prompts while blank), `AI_EXTRA_HEADERS` (optional, validated as a JSON object of string values), and whether to send `AI_TEMPERATURE`. Appends no extra-instruction block. |

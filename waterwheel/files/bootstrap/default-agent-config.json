@@ -2,7 +2,7 @@
   "env-params": [
     {
       "name": "AI_PROVIDER",
-      "description": "AI provider name, e.g. 'openai', 'google', 'anthropic'",
+      "description": "AI provider name, e.g. 'anthropic', 'openai', 'google' / 'google-gemini' / 'gemini', 'deepseek', 'gemma', 'openai-compatible'",
       "default": "anthropic"
     },
     {
@@ -11,7 +11,7 @@
     },
     {
       "name": "AI_BASE_URL",
-      "description": "Base URL for the Ollama server (required for AI_PROVIDER=gemma, e.g. http://localhost:11434)",
+      "description": "Base URL used by two providers, with different path semantics: for AI_PROVIDER=gemma this is the bare Ollama host and '/v1' is appended (e.g. http://localhost:11434); for AI_PROVIDER=openai-compatible this is the full base path, used verbatim with only '/chat/completions' appended (e.g. https://openrouter.ai/api/v1)",
       "default": ""
     },
     {
@@ -28,6 +28,17 @@
       "name": "AI_TEMPERATURE",
       "description": "Temperature (0.0 for strict QA/Logic, 0.7 for creative)",
       "default": "0.0"
+    },
+    {
+      "name": "AI_TEMPERATURE_ENABLED",
+      "description": "Whether AI_PROVIDER=openai-compatible sends temperature at all; set to 'false' for reasoning models that reject the field. Ignored by all other providers.",
+      "default": "true"
+    },
+    {
+      "name": "AI_EXTRA_HEADERS",
+      "description": "JSON object of extra HTTP headers sent with each request (for AI_PROVIDER=openai-compatible), e.g. {\"HTTP-Referer\":\"https://example.com\"}. Merged over the default Authorization/Content-Type headers, so a same-named entry overrides the default.",
+      "default": "",
+      "sensitive": true
     },
     {
       "name": "GLOBAL_CONTEXT",
@@ -131,7 +142,7 @@
     }
   ],
   "restricted-tools": ["browser_run_code_unsafe"],
-  "navigation-tools": ["browser_navigate", "browser_navigate_back"],
+  "navigation-tools": ["browser_navigate", "browser_navigate_back", "browser_reload"],
   "id-enforced-tools": {
     "browser_click": ["target"],
     "browser_fill_form": ["ref"]
