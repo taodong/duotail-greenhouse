@@ -69,7 +69,13 @@ docker buildx build \
 
 Only one `run-qa` process can run at a time, and it shares that single-instance lock with [`rerun-tests`](#rerun-tests-usage). If another `run-qa` or `rerun-tests` session is already active, the command exits and names the stop command for that session (`stop-qa` or `stop-rerun`).
 
-Every run starts with an empty browser: no cookies, localStorage, or other profile data carry over from an earlier run. Browser state does carry across tasks within a run, so a login task can support the tasks after it. Tests must log in themselves rather than rely on an earlier run.
+Every run starts with an empty browser: no cookies, localStorage, or other profile data carry over from an earlier run. Tests must log in themselves rather than rely on an earlier run.
+
+Browser state carries across tasks within a run, so a login task can support the tasks after it. If a task closes the browser with `browser_close`, that state is gone, and the next task must log in again.
+
+If Chromium crashes mid-run, the next tool call starts a new, empty browser, and the remaining tasks run logged out. A crash during a tool call returns `Target page, context or browser has been closed`. A crash between tool calls leaves no trace in the MCP logs.
+
+Browser storage is limited to about 1 GB per origin in this mode, so tests of apps that store more than that may hit `QuotaExceededError`.
 
 ```bash
 run-qa [OPTIONS]
@@ -1105,7 +1111,7 @@ set-domain-permission -ap /tmp/my-agent -l "http://localhost:8025"
 
 `customize-playwright-config` customizes `$AGENT_PATH/instructions/playwright-mcp-config.json` using `/config-helpers/playwright-mcp-config-default.json` as the base template. All operations are replace-only: each run rewrites the output file from the template without accumulating previous customizations.
 
-A config that sets `browser.userDataDir` is not supported: the Playwright MCP service runs with `--isolated`, and it will fail to start with that setting.
+Setting a user data directory is not supported, either as `browser.userDataDir` in a config or through `PLAYWRIGHT_MCP_USER_DATA_DIR`. The Playwright MCP service runs with `--isolated` and will refuse to start, and `run-qa` reports this as a failure to bind to port 3000. The actual error is in `/agent/outputs/playwright.err`.
 
 ```bash
 customize-playwright-config [-ap <agent-path>] [-cp <config-helpers-path>] <operation> [args]
