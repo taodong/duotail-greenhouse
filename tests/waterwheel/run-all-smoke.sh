@@ -55,5 +55,8 @@ bash "$tests_dir/config-ai-provider-smoke.sh"
 echo '== run config-agent smoke =='
 bash "$tests_dir/config-agent-smoke.sh"
 
+echo '== run playwright-mcp smoke =='
+bash "$tests_dir/playwright-mcp-smoke.sh"
+
 echo 'all smoke checks passed'
 

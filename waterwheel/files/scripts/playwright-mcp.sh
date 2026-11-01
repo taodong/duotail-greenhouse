@@ -71,6 +71,7 @@ echo "📦 PLAYWRIGHT_MCP_VERSION: $PLAYWRIGHT_MCP_VERSION"
 
 MCP_ARGS=(
   --browser chromium
+  --isolated
   --allowed-origins "$ALLOWED"
   --host 0.0.0.0
   --port 3000
