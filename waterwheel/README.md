@@ -69,6 +69,8 @@ docker buildx build \
 
 Only one `run-qa` process can run at a time, and it shares that single-instance lock with [`rerun-tests`](#rerun-tests-usage). If another `run-qa` or `rerun-tests` session is already active, the command exits and names the stop command for that session (`stop-qa` or `stop-rerun`).
 
+Every run starts with an empty browser: no cookies, localStorage, or other profile data carry over from an earlier run. Browser state does carry across tasks within a run, so a login task can support the tasks after it. Tests must log in themselves rather than rely on an earlier run.
+
 ```bash
 run-qa [OPTIONS]
 ```
@@ -219,6 +221,9 @@ deletes a record no live session owns. The orchestrators' own exit trap needs no
 it runs while their lock FD is still open, so they still hold the lock. Both
 orchestrators refuse to start if the record cannot be written, since the stoppers would
 otherwise have no way to find the session.
+
+A rerun also starts with an empty browser. Checkpoints restore `user.*` context only, not browser
+state, so a subset whose tasks need a login must include the login task.
 
 ### Examples
 ```bash
@@ -1099,6 +1104,8 @@ set-domain-permission -ap /tmp/my-agent -l "http://localhost:8025"
 ## customize-playwright-config Usage
 
 `customize-playwright-config` customizes `$AGENT_PATH/instructions/playwright-mcp-config.json` using `/config-helpers/playwright-mcp-config-default.json` as the base template. All operations are replace-only: each run rewrites the output file from the template without accumulating previous customizations.
+
+A config that sets `browser.userDataDir` is not supported: the Playwright MCP service runs with `--isolated`, and it will fail to start with that setting.
 
 ```bash
 customize-playwright-config [-ap <agent-path>] [-cp <config-helpers-path>] <operation> [args]
